@@ -1,0 +1,122 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Entity {
+  id          Int            @id @default(autoincrement())
+  name        String
+  description String?
+  imageUrl    String?        @map("image_url")
+  popularity  Float          @default(1.0)
+  status      String         @default("active") // "active" | "pending"
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  entityAnswers EntityAnswer[]
+  guesses       Guess[]
+  gameSessions  GameSession[]
+  submissions   Submission[]
+
+  @@index([status])
+  @@index([popularity])
+  @@map("entities")
+}
+
+model Question {
+  id           Int            @id @default(autoincrement())
+  text         String
+  source       String         @default("wikidata") // "wikidata" | "llm" | "user"
+  qualityScore Float          @default(1.0) @map("quality_score")
+  timesAsked   Int            @default(0) @map("times_asked")
+  isActive     Boolean        @default(true) @map("is_active")
+
+  entityAnswers EntityAnswer[]
+  gameAnswers   GameAnswer[]
+
+  @@index([isActive])
+  @@map("questions")
+}
+
+model EntityAnswer {
+  entityId   Int      @map("entity_id")
+  questionId Int      @map("question_id")
+  yesW       Float    @default(0.0) @map("yes_w")
+  noW        Float    @default(0.0) @map("no_w")
+  unknownW   Float    @default(0.0) @map("unknown_w")
+
+  entity   Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([entityId, questionId])
+  @@index([questionId])
+  @@map("entity_answers")
+}
+
+model GameSession {
+  id             String    @id @default(uuid())
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  result         String    @default("abandoned") // "win" | "lose" | "abandoned"
+  finalEntityId  Int?      @map("final_entity_id")
+  questionsCount Int       @default(0) @map("questions_count")
+
+  finalEntity Entity?      @relation(fields: [finalEntityId], references: [id], onDelete: SetNull)
+  answers     GameAnswer[]
+  guesses     Guess[]
+  submissions Submission[]
+
+  @@index([startedAt])
+  @@map("game_sessions")
+}
+
+model GameAnswer {
+  id          Int      @id @default(autoincrement())
+  sessionId   String   @map("session_id")
+  questionId  Int      @map("question_id")
+  answerValue Float    @map("answer_value")
+  step        Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  session  GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, step])
+  @@map("game_answers")
+}
+
+model Guess {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id")
+  entityId  Int      @map("entity_id")
+  step      Int
+  accepted  Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entity  Entity      @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("guesses")
+}
+
+model Submission {
+  id                   Int      @id @default(autoincrement())
+  sessionId            String?  @map("session_id")
+  entityName           String   @map("entity_name")
+  questionText         String   @map("question_text")
+  answer               Float    @default(1.0)
+  closestWrongEntityId Int?     @map("closest_wrong_entity_id")
+  status               String   @default("pending") // "pending" | "approved" | "rejected"
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  session            GameSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  closestWrongEntity Entity?      @relation(fields: [closestWrongEntityId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("submissions")
+}
