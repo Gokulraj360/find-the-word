@@ -833,9 +833,16 @@ export async function getStorage(): Promise<IStorage> {
   if (storageSingleton) return storageSingleton;
 
   const persistenceFile = path.resolve(process.cwd(), "data", "local_db.json");
+  const dbUrl = process.env.DATABASE_URL?.trim();
 
-  // If force in-memory or PostgreSQL is not available
-  if (process.env.STORAGE_DRIVER === "memory") {
+  // If no DB URL or localhost on cloud deployment or forced in-memory
+  if (
+    !dbUrl ||
+    dbUrl === "" ||
+    (process.env.NODE_ENV === "production" && dbUrl.includes("localhost")) ||
+    process.env.STORAGE_DRIVER === "memory"
+  ) {
+    console.log("[Storage] Using high-performance InMemoryStorage with pre-seeded data.");
     const storage = new InMemoryStorage(persistenceFile);
     await storage.init();
     storageSingleton = storage;
@@ -855,7 +862,7 @@ export async function getStorage(): Promise<IStorage> {
     return prismaStorage;
   } catch (err: any) {
     console.warn(
-      `[Storage] PostgreSQL unreachable (${err.message}). Using high-performance InMemoryStorage with JSON persistence.`
+      `[Storage] PostgreSQL unreachable (${err.message}). Using high-performance InMemoryStorage with pre-seeded data.`
     );
     const storage = new InMemoryStorage(persistenceFile);
     await storage.init();
