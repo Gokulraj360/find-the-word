@@ -130,7 +130,8 @@ export class LearningService {
     questionText: string,
     answer: number,
     history: AnswerHistoryEntry[],
-    closestWrongEntityId?: number
+    closestWrongEntityId?: number,
+    domain: "character" | "object" = "character"
   ): Promise<{ submissionId: number; entityId: number }> {
     // 1. Create a pending entity
     const pendingEntity = await this.storage.createEntity({
@@ -138,6 +139,7 @@ export class LearningService {
       description: `Submitted by user in game session ${sessionId.slice(0, 8)}`,
       imageUrl: null,
       popularity: 5.0,
+      category: domain,
       status: "pending"
     });
 
@@ -160,6 +162,7 @@ export class LearningService {
     const submission = await this.storage.createSubmission({
       sessionId,
       entityName: entityName.trim(),
+      category: domain,
       questionText: questionText.trim(),
       answer,
       closestWrongEntityId: closestWrongEntityId || null,
@@ -203,15 +206,19 @@ export class LearningService {
     let activeEntityId: number;
     if (matchedEntity) {
       if (matchedEntity.status === "pending") {
-        await this.storage.updateEntity(matchedEntity.id, { status: "active" });
+        await this.storage.updateEntity(matchedEntity.id, {
+          status: "active",
+          category: sub.category || matchedEntity.category || "character"
+        });
       }
       activeEntityId = matchedEntity.id;
     } else {
       const created = await this.storage.createEntity({
         name: sub.entityName,
-        description: "Approved community character",
+        description: `Approved community ${sub.category === "object" ? "object" : "character"}`,
         imageUrl: null,
         popularity: 10.0,
+        category: sub.category || "character",
         status: "active"
       });
       activeEntityId = created.id;
@@ -233,6 +240,7 @@ export class LearningService {
       const createdQ = await this.storage.createQuestion({
         text: sub.questionText.trim(),
         source: "user",
+        category: sub.category || "character",
         qualityScore: 1.0,
         timesAsked: 0,
         isActive: true

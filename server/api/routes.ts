@@ -70,6 +70,10 @@ export function authenticateAdmin(req: Request, res: Response, next: NextFunctio
 }
 
 // Zod validation schemas
+const StartSchema = z.object({
+  domain: z.enum(["character", "object"]).optional()
+});
+
 const AnswerSchema = z.object({
   sessionId: z.string().uuid(),
   answer: z.number().refine((val) => [1.0, 0.75, 0.5, 0.25, 0.0].includes(val), {
@@ -116,8 +120,9 @@ export function createApiRouter(
       throw new Error(`Session ${sessionId} not found. Please start a new game.`);
     }
 
+    const domain = (sessionRecord.domain as "character" | "object") || "character";
     const answers = await storage.getGameAnswers(sessionId);
-    const sessionManager = new GameSessionManager(sessionId, matrix, engine);
+    const sessionManager = new GameSessionManager(sessionId, matrix, engine, domain);
     sessionManager.start();
 
     for (const ans of answers) {
@@ -155,6 +160,7 @@ export function createApiRouter(
 
       res.json({
         sessionId,
+        domain: sessionManager.domain,
         state: sessionManager.state,
         question: curQ,
         guess: sessionManager.pendingGuess
@@ -170,8 +176,11 @@ export function createApiRouter(
    */
   router.post("/game/start", rateLimiter, async (req: Request, res: Response) => {
     try {
+      const parsed = StartSchema.safeParse(req.body);
+      const domain = parsed.success && parsed.data?.domain ? parsed.data.domain : "character";
+
       const sessionId = uuidv4();
-      const sessionManager = new GameSessionManager(sessionId, matrix, engine);
+      const sessionManager = new GameSessionManager(sessionId, matrix, engine, domain);
       const startResult = sessionManager.start();
 
       activeSessions.set(sessionId, {
@@ -180,10 +189,11 @@ export function createApiRouter(
       });
 
       // Persist game session record to DB
-      await storage.createGameSession(sessionId);
+      await storage.createGameSession(sessionId, domain);
 
       res.json({
         sessionId,
+        domain,
         question: startResult.question
       });
     } catch (err: any) {
@@ -304,7 +314,8 @@ export function createApiRouter(
         questionText,
         answer,
         sessionManager.history,
-        closestWrongId
+        closestWrongId,
+        sessionManager.domain
       );
 
       res.json({

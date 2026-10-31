@@ -6,12 +6,14 @@ export interface EntityMeta {
   description: string | null;
   imageUrl: string | null;
   popularity: number;
+  category: "character" | "object";
 }
 
 export interface QuestionMeta {
   id: number;
   text: string;
   source: string;
+  category: "character" | "object" | "common";
   qualityScore: number;
   timesAsked: number;
   isActive: boolean;
@@ -24,6 +26,10 @@ export class EngineMatrix {
   // Mapping from DB ID to Matrix index
   public entityIdToIndex: Map<number, number> = new Map();
   public questionIdToIndex: Map<number, number> = new Map();
+
+  // Domain groupings
+  public characterEntityIndices: number[] = [];
+  public objectEntityIndices: number[] = [];
 
   // Matrix dimensions: numEntities x numQuestions
   public numEntities = 0;
@@ -54,13 +60,15 @@ export class EngineMatrix {
       name: e.name,
       description: e.description,
       imageUrl: e.imageUrl,
-      popularity: e.popularity
+      popularity: e.popularity,
+      category: (e.category as "character" | "object") || "character"
     }));
 
     this.questions = rawQuestions.map((q) => ({
       id: q.id,
       text: q.text,
       source: q.source,
+      category: (q.category as "character" | "object" | "common") || "character",
       qualityScore: q.qualityScore,
       timesAsked: q.timesAsked,
       isActive: q.isActive
@@ -70,8 +78,16 @@ export class EngineMatrix {
     this.numQuestions = this.questions.length;
 
     this.entityIdToIndex.clear();
+    this.characterEntityIndices = [];
+    this.objectEntityIndices = [];
+
     for (let i = 0; i < this.numEntities; i++) {
       this.entityIdToIndex.set(this.entities[i].id, i);
+      if (this.entities[i].category === "object") {
+        this.objectEntityIndices.push(i);
+      } else {
+        this.characterEntityIndices.push(i);
+      }
     }
 
     this.questionIdToIndex.clear();
@@ -126,8 +142,40 @@ export class EngineMatrix {
 
     this.cachedCorrelations.clear();
     console.log(
-      `[EngineMatrix] Initialized in-memory matrix: ${this.numEntities} entities x ${this.numQuestions} questions (${totalCells} cells).`
+      `[EngineMatrix] Initialized in-memory matrix: ${this.numEntities} entities (${this.characterEntityIndices.length} characters, ${this.objectEntityIndices.length} objects) x ${this.numQuestions} questions (${totalCells} cells).`
     );
+  }
+
+  /**
+   * Returns a normalized prior distribution restricted to a domain.
+   */
+  public getDomainPrior(domain?: "character" | "object"): Float32Array {
+    if (!domain) {
+      const p = new Float32Array(this.numEntities);
+      p.set(this.priors);
+      return p;
+    }
+
+    const domainPosterior = new Float32Array(this.numEntities);
+    let domainTotal = 0;
+    for (let i = 0; i < this.numEntities; i++) {
+      if (this.entities[i].category === domain) {
+        domainPosterior[i] = this.priors[i];
+        domainTotal += this.priors[i];
+      } else {
+        domainPosterior[i] = 0;
+      }
+    }
+
+    if (domainTotal > 0) {
+      const invTotal = 1.0 / domainTotal;
+      for (let i = 0; i < this.numEntities; i++) {
+        if (this.entities[i].category === domain) {
+          domainPosterior[i] *= invTotal;
+        }
+      }
+    }
+    return domainPosterior;
   }
 
   public getPYes(entityIdx: number, questionIdx: number): number {

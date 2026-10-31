@@ -45,6 +45,10 @@ async function main() {
     }
   }
 
+  if ("flush" in storage && typeof (storage as any).flush === "function") {
+    await (storage as any).flush();
+  }
+
   console.log(`✅ Seed completed successfully! Seeded ${count} entity-answer pairs into ${storage.name}.`);
   process.exit(0);
 }

@@ -31,6 +31,7 @@ export default function App() {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [currentDomain, setCurrentDomain] = useState<"character" | "object">("character");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [guess, setGuess] = useState<CandidateGuess | null>(null);
   const [closestWrongEntity, setClosestWrongEntity] = useState<CandidateGuess | null>(null);
@@ -71,6 +72,7 @@ export default function App() {
         return;
       }
       const data = await res.json();
+      if (data.domain) setCurrentDomain(data.domain);
       if (data.state === "in_progress" && data.question) {
         setSessionId(data.sessionId);
         setCurrentQuestion(data.question);
@@ -108,7 +110,7 @@ export default function App() {
   };
 
   // Start new game
-  const startGame = async () => {
+  const startGame = async (domain: "character" | "object" = "character") => {
     setLoading(true);
     setErrorMsg("");
     setLastAction(null);
@@ -117,10 +119,15 @@ export default function App() {
     setLearnQuestion("");
     setClosestWrongEntity(null);
     setImageFailed(false);
+    setCurrentDomain(domain);
     sessionStorage.removeItem("cognitor_session_id");
 
     try {
-      const res = await fetch("/api/game/start", { method: "POST" });
+      const res = await fetch("/api/game/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain })
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start game");
       setSessionId(data.sessionId);
@@ -130,7 +137,7 @@ export default function App() {
       setGameState("in_progress");
     } catch (err: any) {
       setErrorMsg(err.message);
-      setLastAction(() => startGame);
+      setLastAction(() => () => startGame(domain));
     } finally {
       setLoading(false);
     }
@@ -356,16 +363,64 @@ export default function App() {
           {/* IDLE / START SCREEN */}
           {gameState === "idle" && (
             <div className="card" style={{ textAlign: "center" }}>
-              <h1 style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>Think of a Character</h1>
-              <p style={{ color: "var(--text-muted)", marginBottom: "2rem", fontSize: "1.05rem" }}>
-                Think of any famous real person or fictional character. Answer my questions, and I will deduce who you are thinking of using Bayesian probability.
+              <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>Cognitor</h1>
+              <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "1.05rem" }}>
+                Select a category below. Think of any famous figure or everyday object, answer questions, and I will deduce your thought using Bayesian inference.
               </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => startGame("character")}
+                  disabled={loading}
+                  style={{
+                    padding: "1.5rem 1rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    background: "var(--card-bg)",
+                    border: "2px solid var(--accent)",
+                    color: "var(--text-main)",
+                    cursor: "pointer"
+                  }}
+                >
+                  <span style={{ fontSize: "2.2rem" }}>👤</span>
+                  <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--accent)" }}>Living Things & Characters</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 400, lineHeight: 1.4 }}>
+                    Real people, historical figures, celebrities, athletes, fictional heroes, or anime
+                  </span>
+                </button>
+
+                <button
+                  className="btn btn-primary"
+                  onClick={() => startGame("object")}
+                  disabled={loading}
+                  style={{
+                    padding: "1.5rem 1rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    background: "var(--card-bg)",
+                    border: "2px solid var(--accent)",
+                    color: "var(--text-main)",
+                    cursor: "pointer"
+                  }}
+                >
+                  <span style={{ fontSize: "2.2rem" }}>💡</span>
+                  <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--accent)" }}>Objects & Everyday Items</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 400, lineHeight: 1.4 }}>
+                    Tools, electronic gadgets, household appliances, vehicles, instruments, or goods
+                  </span>
+                </button>
+              </div>
 
               {stats && (
                 <div className="stats-grid">
                   <div className="stat-box">
                     <div className="stat-number">{stats.activeEntities}</div>
-                    <div className="stat-label">Characters</div>
+                    <div className="stat-label">Total Entities</div>
                   </div>
                   <div className="stat-box">
                     <div className="stat-number">{stats.activeQuestions}</div>
@@ -378,11 +433,7 @@ export default function App() {
                 </div>
               )}
 
-              <button className="btn btn-primary" onClick={startGame} disabled={loading} style={{ fontSize: "1.1rem", padding: "0.85rem 2.5rem" }}>
-                {loading ? "Starting..." : "Start Game"}
-              </button>
-
-              <div style={{ marginTop: "1.5rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              <div style={{ marginTop: "1rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
                 Tip: You can use keyboard keys <code>1-5</code> or <code>Y/P/D/N</code> during play.
               </div>
             </div>
@@ -398,7 +449,9 @@ export default function App() {
                     <div style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%`, height: "100%", background: "var(--accent)", borderRadius: 2, transition: "width 0.25s ease" }} />
                   </div>
                 </div>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Bayesian Engine</span>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  {currentDomain === "object" ? "💡 Objects Mode" : "👤 Characters Mode"} • Bayesian Engine
+                </span>
               </div>
 
               <div className="question-text">{currentQuestion.text}</div>
@@ -425,7 +478,7 @@ export default function App() {
                 <button className="btn" onClick={handleBack} disabled={loading || currentQuestion.step <= 1} title="Undo last answer (Backspace)">
                   ← Back <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(Undo)</span>
                 </button>
-                <button className="btn" onClick={startGame} disabled={loading} title="Restart game">
+                <button className="btn" onClick={() => startGame(currentDomain)} disabled={loading} title="Restart game">
                   Restart
                 </button>
               </div>
@@ -451,7 +504,7 @@ export default function App() {
                   className="guess-image"
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", color: "var(--text-muted)" }}
                 >
-                  👤
+                  {currentDomain === "object" ? "📦" : "👤"}
                 </div>
               )}
 
@@ -459,7 +512,7 @@ export default function App() {
               {guess.description && <p className="guess-desc">{guess.description}</p>}
 
               <p style={{ marginBottom: "1.5rem", fontWeight: 500, fontSize: "1.1rem" }}>
-                Are you thinking of this character?
+                Are you thinking of this {currentDomain === "object" ? "object" : "character"}?
               </p>
 
               <div className="guess-actions">
@@ -480,11 +533,16 @@ export default function App() {
                 Guessed It!
               </h2>
               <p style={{ color: "var(--text-muted)", marginBottom: "2rem" }}>
-                I successfully deduced your character using Bayesian inference. Soft counts and popularity have been updated in the learning loop.
+                I successfully deduced your {currentDomain === "object" ? "object" : "character"} using Bayesian inference! Soft counts and popularity have been updated in the learning loop.
               </p>
-              <button className="btn btn-primary" onClick={startGame} style={{ padding: "0.85rem 2rem" }}>
-                Play Again
-              </button>
+              <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
+                <button className="btn btn-primary" onClick={() => startGame(currentDomain)} style={{ padding: "0.85rem 1.8rem" }}>
+                  Play Again ({currentDomain === "object" ? "Objects" : "Characters"})
+                </button>
+                <button className="btn" onClick={() => startGame(currentDomain === "object" ? "character" : "object")} style={{ padding: "0.85rem 1.8rem" }}>
+                  Switch to {currentDomain === "object" ? "Characters" : "Objects"}
+                </button>
+              </div>
             </div>
           )}
 
@@ -493,26 +551,28 @@ export default function App() {
             <div className="card">
               <h2 style={{ fontSize: "1.6rem", marginBottom: "0.5rem" }}>You Defeated Me!</h2>
               <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-                I could not guess your character within my limits. Teach me so I can guess it next time!
+                I could not guess your {currentDomain === "object" ? "object" : "character"} within my limits. Teach me so I can guess it next time!
               </p>
 
               {learnSubmitted ? (
                 <div style={{ textAlign: "center", padding: "1.5rem" }}>
                   <p style={{ color: "var(--success)", fontSize: "1.1rem", marginBottom: "1.5rem" }}>
-                    ✓ Thank you! Your character and question have been submitted for moderation.
+                    ✓ Thank you! Your {currentDomain === "object" ? "object" : "character"} and distinguishing question have been submitted for moderation.
                   </p>
-                  <button className="btn btn-primary" onClick={startGame}>
+                  <button className="btn btn-primary" onClick={() => startGame(currentDomain)}>
                     Play Again
                   </button>
                 </div>
               ) : (
                 <form onSubmit={handleLearnSubmit}>
                   <div className="form-group">
-                    <label className="form-label">Who were you thinking of?</label>
+                    <label className="form-label">
+                      {currentDomain === "object" ? "What object were you thinking of?" : "Who were you thinking of?"}
+                    </label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Luke Skywalker, Alan Turing"
+                      placeholder={currentDomain === "object" ? "e.g. Acoustic Guitar, Microwave" : "e.g. Luke Skywalker, Alan Turing"}
                       value={learnName}
                       onChange={(e) => setLearnName(e.target.value)}
                       required
@@ -527,7 +587,7 @@ export default function App() {
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Does your character use a green lightsaber?"
+                      placeholder={currentDomain === "object" ? "e.g. Does it produce musical notes?" : "e.g. Does your character use a green lightsaber?"}
                       value={learnQuestion}
                       onChange={(e) => setLearnQuestion(e.target.value)}
                       required
@@ -535,7 +595,9 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">What is the answer for your character?</label>
+                    <label className="form-label">
+                      What is the answer for your {currentDomain === "object" ? "object" : "character"}?
+                    </label>
                     <select
                       className="form-select"
                       value={learnAnswer}
@@ -553,7 +615,7 @@ export default function App() {
                     <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
                       {loading ? "Submitting..." : "Teach Cognitor"}
                     </button>
-                    <button type="button" className="btn" onClick={startGame}>
+                    <button type="button" className="btn" onClick={() => startGame(currentDomain)}>
                       Skip & Play Again
                     </button>
                   </div>

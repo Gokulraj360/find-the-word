@@ -70,7 +70,7 @@ async function runSimulation(numGames = 50, noiseRate = 0.05) {
   for (let g = 0; g < numGames; g++) {
     // Pick target entity (either round-robin across seed or random)
     const targetEntity = entityList[g % entityList.length];
-    const session = new GameSessionManager(`sim-${g + 1}`, matrix, engine);
+    const session = new GameSessionManager(`sim-${g + 1}`, matrix, engine, targetEntity.category);
     const startRes = session.start();
 
     let curQ = startRes.question;

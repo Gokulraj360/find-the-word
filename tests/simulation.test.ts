@@ -19,7 +19,7 @@ describe("Simulation CI Gate", () => {
 
     for (let g = 0; g < numGames; g++) {
       const target = matrix.entities[g % matrix.entities.length];
-      const session = new GameSessionManager(`test-sim-${g}`, matrix, engine);
+      const session = new GameSessionManager(`test-sim-${g}`, matrix, engine, target.category);
       let curQ = session.start().question;
 
       while (session.state === "in_progress" || session.state === "guess_pending") {

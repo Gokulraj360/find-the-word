@@ -130,6 +130,26 @@ export class InMemoryStorage implements IStorage {
     }, 150);
   }
 
+  public async flush(): Promise<void> {
+    if (!this.persistenceFilePath || process.env.VERCEL) return;
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    const dir = path.dirname(this.persistenceFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const data = {
+      entities: Array.from(this.entities.values()),
+      questions: Array.from(this.questions.values()),
+      entityAnswers: Array.from(this.entityAnswers.values()),
+      submissions: Array.from(this.submissions.values()),
+      entityIdCounter: this.entityIdCounter,
+      questionIdCounter: this.questionIdCounter,
+      submissionIdCounter: this.submissionIdCounter
+    };
+    fs.writeFileSync(this.persistenceFilePath, JSON.stringify(data, null, 2), "utf8");
+  }
+
   private loadFromDump(data: any): void {
     this.entities.clear();
     this.questions.clear();
@@ -268,9 +288,10 @@ export class InMemoryStorage implements IStorage {
     this.saveSnapshot();
   }
 
-  async createGameSession(id: string): Promise<GameSessionRecord> {
+  async createGameSession(id: string, domain?: "character" | "object"): Promise<GameSessionRecord> {
     const session: GameSessionRecord = {
       id,
+      domain: domain || "character",
       startedAt: new Date(),
       endedAt: null,
       result: "abandoned",
@@ -414,6 +435,7 @@ export class PrismaStorage implements IStorage {
       description: i.description,
       imageUrl: i.imageUrl,
       popularity: i.popularity,
+      category: (i as any).category as "character" | "object" | undefined,
       status: i.status as "active" | "pending",
       createdAt: i.createdAt
     }));
@@ -427,6 +449,7 @@ export class PrismaStorage implements IStorage {
       description: i.description,
       imageUrl: i.imageUrl,
       popularity: i.popularity,
+      category: (i as any).category as "character" | "object" | undefined,
       status: i.status as "active" | "pending",
       createdAt: i.createdAt
     }));
@@ -441,6 +464,7 @@ export class PrismaStorage implements IStorage {
       description: item.description,
       imageUrl: item.imageUrl,
       popularity: item.popularity,
+      category: (item as any).category as "character" | "object" | undefined,
       status: item.status as "active" | "pending",
       createdAt: item.createdAt
     };
@@ -453,11 +477,13 @@ export class PrismaStorage implements IStorage {
         description: data.description,
         imageUrl: data.imageUrl,
         popularity: data.popularity,
+        category: data.category || "character",
         status: data.status
       }
     });
     return {
       ...created,
+      category: (created as any).category,
       status: created.status as "active" | "pending"
     };
   }
@@ -470,11 +496,13 @@ export class PrismaStorage implements IStorage {
         description: data.description,
         imageUrl: data.imageUrl,
         popularity: data.popularity,
+        ...(data.category ? { category: data.category } : {}),
         status: data.status
       }
     });
     return {
       ...updated,
+      category: (updated as any).category,
       status: updated.status as "active" | "pending"
     };
   }
@@ -487,6 +515,7 @@ export class PrismaStorage implements IStorage {
       id: q.id,
       text: q.text,
       source: q.source as "wikidata" | "llm" | "user",
+      category: (q as any).category as "character" | "object" | "common" | undefined,
       qualityScore: q.qualityScore,
       timesAsked: q.timesAsked,
       isActive: q.isActive
@@ -499,6 +528,7 @@ export class PrismaStorage implements IStorage {
       id: q.id,
       text: q.text,
       source: q.source as "wikidata" | "llm" | "user",
+      category: (q as any).category as "character" | "object" | "common" | undefined,
       qualityScore: q.qualityScore,
       timesAsked: q.timesAsked,
       isActive: q.isActive
@@ -512,6 +542,7 @@ export class PrismaStorage implements IStorage {
       id: item.id,
       text: item.text,
       source: item.source as "wikidata" | "llm" | "user",
+      category: (item as any).category as "character" | "object" | "common" | undefined,
       qualityScore: item.qualityScore,
       timesAsked: item.timesAsked,
       isActive: item.isActive
@@ -523,6 +554,7 @@ export class PrismaStorage implements IStorage {
       data: {
         text: data.text,
         source: data.source,
+        category: data.category || "character",
         qualityScore: data.qualityScore,
         timesAsked: data.timesAsked,
         isActive: data.isActive
@@ -532,6 +564,7 @@ export class PrismaStorage implements IStorage {
       id: created.id,
       text: created.text,
       source: created.source as "wikidata" | "llm" | "user",
+      category: (created as any).category,
       qualityScore: created.qualityScore,
       timesAsked: created.timesAsked,
       isActive: created.isActive
@@ -544,6 +577,7 @@ export class PrismaStorage implements IStorage {
       data: {
         text: data.text,
         source: data.source,
+        ...(data.category ? { category: data.category } : {}),
         qualityScore: data.qualityScore,
         timesAsked: data.timesAsked,
         isActive: data.isActive
@@ -553,6 +587,7 @@ export class PrismaStorage implements IStorage {
       id: updated.id,
       text: updated.text,
       source: updated.source as "wikidata" | "llm" | "user",
+      category: (updated as any).category,
       qualityScore: updated.qualityScore,
       timesAsked: updated.timesAsked,
       isActive: updated.isActive
@@ -637,12 +672,13 @@ export class PrismaStorage implements IStorage {
     });
   }
 
-  async createGameSession(id: string): Promise<GameSessionRecord> {
+  async createGameSession(id: string, domain?: "character" | "object"): Promise<GameSessionRecord> {
     const item = await this.prisma.gameSession.create({
-      data: { id }
+      data: { id, domain: domain || "character" }
     });
     return {
       id: item.id,
+      domain: (item as any).domain as "character" | "object" | undefined,
       startedAt: item.startedAt,
       endedAt: item.endedAt,
       result: item.result as "win" | "lose" | "abandoned",
@@ -663,6 +699,7 @@ export class PrismaStorage implements IStorage {
     });
     return {
       id: updated.id,
+      domain: (updated as any).domain as "character" | "object" | undefined,
       startedAt: updated.startedAt,
       endedAt: updated.endedAt,
       result: updated.result as "win" | "lose" | "abandoned",
@@ -676,6 +713,7 @@ export class PrismaStorage implements IStorage {
     if (!item) return null;
     return {
       id: item.id,
+      domain: (item as any).domain as "character" | "object" | undefined,
       startedAt: item.startedAt,
       endedAt: item.endedAt,
       result: item.result as "win" | "lose" | "abandoned",
@@ -742,6 +780,7 @@ export class PrismaStorage implements IStorage {
       data: {
         sessionId: data.sessionId,
         entityName: data.entityName,
+        category: data.category || "character",
         questionText: data.questionText,
         answer: data.answer,
         closestWrongEntityId: data.closestWrongEntityId,
@@ -752,6 +791,7 @@ export class PrismaStorage implements IStorage {
       id: item.id,
       sessionId: item.sessionId,
       entityName: item.entityName,
+      category: (item as any).category as "character" | "object" | undefined,
       questionText: item.questionText,
       answer: item.answer,
       closestWrongEntityId: item.closestWrongEntityId,
@@ -769,6 +809,7 @@ export class PrismaStorage implements IStorage {
       id: i.id,
       sessionId: i.sessionId,
       entityName: i.entityName,
+      category: (i as any).category as "character" | "object" | undefined,
       questionText: i.questionText,
       answer: i.answer,
       closestWrongEntityId: i.closestWrongEntityId,
@@ -784,6 +825,7 @@ export class PrismaStorage implements IStorage {
       id: item.id,
       sessionId: item.sessionId,
       entityName: item.entityName,
+      category: (item as any).category as "character" | "object" | undefined,
       questionText: item.questionText,
       answer: item.answer,
       closestWrongEntityId: item.closestWrongEntityId,

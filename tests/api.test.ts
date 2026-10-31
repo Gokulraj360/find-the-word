@@ -95,9 +95,22 @@ describe("Cognitor REST API Endpoints", () => {
     const res = await fetch(`${baseUrl}/api/stats`);
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.activeEntities).toBe(50);
-    expect(data.activeQuestions).toBe(40);
+    expect(data.activeEntities).toBe(95);
+    expect(data.activeQuestions).toBe(70);
     expect(data.totalGames).toBeGreaterThanOrEqual(1);
+  });
+
+  it("POST /api/game/start with domain 'object' should start game in object mode", async () => {
+    const res = await fetch(`${baseUrl}/api/game/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "object" })
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.domain).toBe("object");
+    expect(data.sessionId).toBeDefined();
+    expect(data.question).toBeDefined();
   });
 
   it("POST /api/admin/login should validate password and issue JWT", async () => {

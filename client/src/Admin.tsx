@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 interface Submission {
   id: number;
   entityName: string;
+  category?: "character" | "object";
   questionText: string;
   answer: number;
   status: "pending" | "approved" | "rejected";
@@ -12,6 +13,7 @@ interface Submission {
 interface EntityItem {
   id: number;
   name: string;
+  category?: "character" | "object";
   description: string | null;
   popularity: number;
   status: string;
@@ -20,6 +22,7 @@ interface EntityItem {
 interface QuestionItem {
   id: number;
   text: string;
+  category?: "character" | "object" | "common";
   qualityScore: number;
   timesAsked: number;
   isActive: boolean;
@@ -297,6 +300,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
                 <thead>
                   <tr>
                     <th>ID</th>
+                    <th>Category</th>
                     <th>Entity</th>
                     <th>Distinguishing Question</th>
                     <th>Answer</th>
@@ -309,6 +313,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
                   {paginate(filteredSubmissions).map((s: Submission) => (
                     <tr key={s.id}>
                       <td>{s.id}</td>
+                      <td>
+                        <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
+                          {s.category === "object" ? "💡 Object" : "👤 Character"}
+                        </span>
+                      </td>
                       <td><strong>{s.entityName}</strong></td>
                       <td>{s.questionText}</td>
                       <td>{s.answer >= 0.75 ? "Yes" : s.answer <= 0.25 ? "No" : "Unknown"}</td>
@@ -357,6 +366,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Category</th>
                 <th>Name</th>
                 <th>Description</th>
                 <th>Popularity</th>
@@ -367,6 +377,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               {paginate(filteredEntities).map((e: EntityItem) => (
                 <tr key={e.id}>
                   <td>{e.id}</td>
+                  <td>
+                    <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
+                      {e.category === "object" ? "💡 Object" : "👤 Character"}
+                    </span>
+                  </td>
                   <td><strong>{e.name}</strong></td>
                   <td>{e.description || "—"}</td>
                   <td>{Math.round(e.popularity)}</td>
@@ -400,6 +415,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Domain</th>
                 <th>Question</th>
                 <th>Quality Score</th>
                 <th>Times Asked</th>
@@ -410,6 +426,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               {paginate(filteredQuestions).map((q: QuestionItem) => (
                 <tr key={q.id}>
                   <td>{q.id}</td>
+                  <td>
+                    <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
+                      {q.category === "object" ? "💡 Object" : q.category === "common" ? "🌐 Common" : "👤 Character"}
+                    </span>
+                  </td>
                   <td>{q.text}</td>
                   <td>{q.qualityScore.toFixed(2)}</td>
                   <td>{q.timesAsked}</td>

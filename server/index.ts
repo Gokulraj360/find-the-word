@@ -25,6 +25,11 @@ async function bootstrap() {
   const engine = new BayesianEngine(matrix);
   const learning = new LearningService(storage, matrix);
 
+  // Health check endpoint for Render / cloud deployment
+  app.get("/healthz", (_req, res) => {
+    res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+  });
+
   // Mount API
   const apiRouter = createApiRouter(storage, matrix, engine, learning);
   app.use("/api", apiRouter);
@@ -35,7 +40,7 @@ async function bootstrap() {
 
   // SPA fallback
   app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) return next();
+    if (req.path.startsWith("/api") || req.path === "/healthz") return next();
     res.sendFile(path.join(clientDist, "index.html"), (err) => {
       if (err) {
         res.status(200).send(`
@@ -52,8 +57,8 @@ async function bootstrap() {
     });
   });
 
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 Cognitor server listening on http://localhost:${PORT}`);
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Cognitor server listening on http://0.0.0.0:${PORT}`);
   });
 
   return { app, server, matrix, storage, engine, learning };

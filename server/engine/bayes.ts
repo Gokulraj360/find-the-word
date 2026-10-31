@@ -35,12 +35,10 @@ export class BayesianEngine {
   }
 
   /**
-   * Initializes a fresh prior distribution for a new game session.
+   * Initializes a fresh prior distribution for a new game session, optionally restricted to a domain.
    */
-  public createInitialPosterior(): Float32Array {
-    const posterior = new Float32Array(this.matrix.numEntities);
-    posterior.set(this.matrix.priors);
-    return posterior;
+  public createInitialPosterior(domain: "character" | "object" = "character"): Float32Array {
+    return this.matrix.getDomainPrior(domain);
   }
 
   /**
@@ -185,9 +183,10 @@ export class BayesianEngine {
   /**
    * Shannon entropy: - sum(p * ln(p))
    */
-  public calculateEntropy(probs: number[]): number {
+  public calculateEntropy(probs: ArrayLike<number>): number {
     let entropy = 0.0;
-    for (let i = 0; i < probs.length; i++) {
+    const len = probs.length;
+    for (let i = 0; i < len; i++) {
       const p = probs[i];
       if (p > 1e-9) {
         entropy -= p * Math.log(p);
@@ -203,14 +202,29 @@ export class BayesianEngine {
     posterior: Float32Array,
     askedQuestionIndices: Set<number>,
     stepCount: number,
-    contradictionWeakening = false
+    contradictionWeakening = false,
+    domain?: "character" | "object"
   ): QuestionRecommendation | null {
-    const K = Math.min(300, this.matrix.numEntities);
+    if (!domain) {
+      let charMass = 0;
+      let objMass = 0;
+      for (const idx of this.matrix.characterEntityIndices) charMass += posterior[idx] || 0;
+      for (const idx of this.matrix.objectEntityIndices) objMass += posterior[idx] || 0;
+      domain = objMass > charMass ? "object" : "character";
+    }
 
-    // Get top K candidate indices
-    const candidateIndices = Array.from({ length: this.matrix.numEntities }, (_, i) => i)
-      .sort((a, b) => posterior[b] - posterior[a])
-      .slice(0, K);
+    const K = Math.min(200, this.matrix.numEntities);
+    const N = this.matrix.numEntities;
+
+    // Get top K candidate indices (strictly positive probability candidates in active domain)
+    const activeIndices: number[] = [];
+    for (let i = 0; i < N; i++) {
+      if (posterior[i] > 1e-9) {
+        activeIndices.push(i);
+      }
+    }
+    activeIndices.sort((a, b) => posterior[b] - posterior[a]);
+    const candidateIndices = activeIndices.slice(0, K);
 
     let topKSum = 0;
     for (const idx of candidateIndices) {
@@ -237,11 +251,21 @@ export class BayesianEngine {
       ANSWER_VALUES.NO
     ];
 
+    const candidateCount = candidateIndices.length;
+    const candPYes = new Float32Array(candidateCount);
+    const candW = new Float32Array(candidateCount);
+    const postSimProbs = new Float32Array(candidateCount);
+
     for (let qIdx = 0; qIdx < this.matrix.numQuestions; qIdx++) {
       if (askedQuestionIndices.has(qIdx)) continue;
 
       const qMeta = this.matrix.questions[qIdx];
       if (!qMeta.isActive || qMeta.qualityScore < 0.3) continue;
+
+      // Domain filter: only ask questions matching active domain or common questions
+      if (domain && qMeta.category !== domain && qMeta.category !== "common") {
+        continue;
+      }
 
       // Skip if highly correlated (> 0.95) with an already-asked question
       let correlated = false;
@@ -254,41 +278,64 @@ export class BayesianEngine {
       if (correlated) continue;
 
       // Predict answer probabilities P(A = a) across top K
-      const pAnswers = [0, 0, 0, 0, 0]; // YES, PROBABLY, UNKNOWN, PROBABLY_NOT, NO
+      let pYesSum = 0;
+      let pProbablySum = 0;
+      let pUnknownSum = 0;
+      let pProbNotSum = 0;
+      let pNoSum = 0;
 
-      for (let c = 0; c < candidateIndices.length; c++) {
+      for (let c = 0; c < candidateCount; c++) {
         const entIdx = candidateIndices[c];
         const pCand = candidateProbs[c];
         const pY = this.matrix.getPYes(entIdx, qIdx);
         const conf = this.matrix.getConfidence(entIdx, qIdx);
+        candPYes[c] = pY;
+        candW[c] = conf < 1.0 ? 0.0 : this.getConfidenceWeight(conf, contradictionWeakening);
 
         if (conf < 1.0) {
-          pAnswers[2] += pCand; // Unknown
+          pUnknownSum += pCand;
         } else {
-          pAnswers[0] += pCand * (pY * 0.85); // Yes
-          pAnswers[1] += pCand * (pY * 0.10 + (1 - pY) * 0.05); // Probably
-          pAnswers[2] += pCand * 0.05; // Unknown
-          pAnswers[3] += pCand * ((1 - pY) * 0.10 + pY * 0.05); // Probably not
-          pAnswers[4] += pCand * ((1 - pY) * 0.85); // No
+          pYesSum += pCand * (pY * 0.85);
+          pProbablySum += pCand * (pY * 0.10);
+          pUnknownSum += pCand * 0.05;
+          pProbNotSum += pCand * ((1 - pY) * 0.10);
+          pNoSum += pCand * ((1 - pY) * 0.85);
         }
       }
+
+      const pSum = pYesSum + pProbablySum + pUnknownSum + pProbNotSum + pNoSum;
+      if (pSum <= 0) continue;
+      const invPSum = 1.0 / pSum;
+      const pAnswers0 = pYesSum * invPSum;
+      const pAnswers1 = pProbablySum * invPSum;
+      const pAnswers2 = pUnknownSum * invPSum;
+      const pAnswers3 = pProbNotSum * invPSum;
+      const pAnswers4 = pNoSum * invPSum;
 
       // Compute Expected Posterior Entropy
       let expectedH = 0.0;
       for (let aIdx = 0; aIdx < 5; aIdx++) {
-        const pA = pAnswers[aIdx];
-        if (pA <= 1e-6) continue;
+        const pA = aIdx === 0 ? pAnswers0 : aIdx === 1 ? pAnswers1 : aIdx === 2 ? pAnswers2 : aIdx === 3 ? pAnswers3 : pAnswers4;
+        if (pA <= 0.002) continue;
+
+        // For Unknown (aIdx === 2), posterior is unchanged so H is exactly H0
+        if (aIdx === 2) {
+          expectedH += pA * H0;
+          continue;
+        }
 
         const simulatedAnswer = answersToSimulate[aIdx];
-        const postSimProbs: number[] = new Array(candidateIndices.length);
         let simSum = 0.0;
 
-        for (let c = 0; c < candidateIndices.length; c++) {
-          const entIdx = candidateIndices[c];
+        for (let c = 0; c < candidateCount; c++) {
           const priorVal = candidateProbs[c];
-          const pY = this.matrix.getPYes(entIdx, qIdx);
-          const conf = this.matrix.getConfidence(entIdx, qIdx);
-          const lik = this.calculateLikelihood(simulatedAnswer, pY, conf, contradictionWeakening);
+          const w = candW[c];
+          let lik = 1.0;
+          if (w > 0.0) {
+            const dist = Math.abs(simulatedAnswer - candPYes[c]);
+            const base = Math.max(0.03, Math.min(1.0, 1.0 - dist));
+            lik = Math.pow(base, w);
+          }
           const updated = priorVal * lik;
           postSimProbs[c] = updated;
           simSum += updated;
@@ -296,25 +343,25 @@ export class BayesianEngine {
 
         if (simSum > 0) {
           const invSim = 1.0 / simSum;
-          for (let c = 0; c < postSimProbs.length; c++) {
-            postSimProbs[c] *= invSim;
+          let hA = 0.0;
+          for (let c = 0; c < candidateCount; c++) {
+            const p = postSimProbs[c] * invSim;
+            if (p > 1e-9) hA -= p * Math.log(p);
           }
-          const H_a = this.calculateEntropy(postSimProbs);
-          expectedH += pA * H_a;
+          expectedH += pA * hA;
         }
       }
 
       const infoGain = Math.max(0.0, H0 - expectedH);
-      let score = infoGain * qMeta.qualityScore;
+      let score = Math.max(infoGain, 0.0001) * qMeta.qualityScore;
 
       // 1. Broad splitter boost in early game (first 3 questions)
       if (stepCount < 3) {
-        // Broad splitter is balanced near 50% yes across all active entities
         let meanPYes = 0;
-        for (let i = 0; i < this.matrix.numEntities; i++) {
-          meanPYes += this.matrix.getPYes(i, qIdx);
+        for (let c = 0; c < candidateCount; c++) {
+          meanPYes += this.matrix.getPYes(candidateIndices[c], qIdx);
         }
-        meanPYes /= this.matrix.numEntities;
+        meanPYes /= candidateCount;
         const splitBalance = 1.0 - 2.0 * Math.abs(meanPYes - 0.5); // 1.0 if 50/50, 0 if 100/0
         score *= 1.0 + 1.2 * Math.max(0, splitBalance);
       }
@@ -330,16 +377,33 @@ export class BayesianEngine {
         }
       }
 
-      candidateQuestions.push({
-        questionIdx: qIdx,
-        questionId: qMeta.id,
-        text: qMeta.text,
-        expectedInfoGain: infoGain,
-        score
-      });
+      if (score > 1e-6) {
+        candidateQuestions.push({
+          questionIdx: qIdx,
+          questionId: qMeta.id,
+          text: qMeta.text,
+          expectedInfoGain: infoGain,
+          score
+        });
+      }
     }
 
-    if (candidateQuestions.length === 0) return null;
+    if (candidateQuestions.length === 0) {
+      for (let qIdx = 0; qIdx < this.matrix.numQuestions; qIdx++) {
+        if (askedQuestionIndices.has(qIdx)) continue;
+        const qMeta = this.matrix.questions[qIdx];
+        if (!qMeta.isActive) continue;
+        if (domain && qMeta.category !== domain && qMeta.category !== "common") continue;
+        return {
+          questionIdx: qIdx,
+          questionId: qMeta.id,
+          text: qMeta.text,
+          expectedInfoGain: 0,
+          score: 0.1
+        };
+      }
+      return null;
+    }
 
     // Sort by score descending
     candidateQuestions.sort((a, b) => b.score - a.score);

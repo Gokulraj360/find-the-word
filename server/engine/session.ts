@@ -18,6 +18,7 @@ export type GameState = "in_progress" | "guess_pending" | "won" | "lost";
 
 export class GameSessionManager {
   public sessionId: string;
+  public domain: "character" | "object";
   public matrix: EngineMatrix;
   public engine: BayesianEngine;
 
@@ -34,11 +35,12 @@ export class GameSessionManager {
   public maxGuesses = 3;
   public hardQuestionLimit = 30;
 
-  constructor(sessionId: string, matrix: EngineMatrix, engine: BayesianEngine) {
+  constructor(sessionId: string, matrix: EngineMatrix, engine: BayesianEngine, domain: "character" | "object" = "character") {
     this.sessionId = sessionId;
+    this.domain = domain;
     this.matrix = matrix;
     this.engine = engine;
-    this.posterior = this.engine.createInitialPosterior();
+    this.posterior = this.engine.createInitialPosterior(this.domain);
   }
 
   public get stepCount(): number {
@@ -57,10 +59,11 @@ export class GameSessionManager {
       this.posterior,
       this.askedQuestionIndices,
       this.stepCount,
-      this.contradictionWeakening
+      this.contradictionWeakening,
+      this.domain
     );
     if (!nextQ) {
-      throw new Error("No active questions available in engine matrix.");
+      throw new Error(`No active questions available in engine matrix for domain: ${this.domain}.`);
     }
     this.currentQuestionIdx = nextQ.questionIdx;
     return {
@@ -149,7 +152,8 @@ export class GameSessionManager {
       this.posterior,
       this.askedQuestionIndices,
       this.stepCount,
-      this.contradictionWeakening
+      this.contradictionWeakening,
+      this.domain
     );
 
     const mustGuess = this.shouldGuess(topCandidates, nextQ !== null);
@@ -238,7 +242,8 @@ export class GameSessionManager {
       this.posterior,
       this.askedQuestionIndices,
       this.stepCount,
-      this.contradictionWeakening
+      this.contradictionWeakening,
+      this.domain
     );
 
     if (!nextQ) {
@@ -272,7 +277,7 @@ export class GameSessionManager {
     this.history.pop();
 
     // Recompute posterior from scratch
-    this.posterior = this.engine.createInitialPosterior();
+    this.posterior = this.engine.createInitialPosterior(this.domain);
     this.askedQuestionIndices.clear();
     this.contradictionWeakening = false;
 
@@ -303,7 +308,8 @@ export class GameSessionManager {
       this.posterior,
       this.askedQuestionIndices,
       this.stepCount,
-      this.contradictionWeakening
+      this.contradictionWeakening,
+      this.domain
     );
 
     if (!nextQ) {

@@ -19,11 +19,35 @@ describe("Cognitor Bayesian Engine", () => {
 
   describe("In-Memory Matrix & Prior Initialization", () => {
     it("should load active entities, questions, and non-empty Float32Arrays", () => {
-      expect(matrix.numEntities).toBe(50);
-      expect(matrix.numQuestions).toBe(40);
-      expect(matrix.pYes.length).toBe(50 * 40);
-      expect(matrix.confidence.length).toBe(50 * 40);
-      expect(matrix.priors.length).toBe(50);
+      expect(matrix.numEntities).toBe(95);
+      expect(matrix.numQuestions).toBe(70);
+      expect(matrix.pYes.length).toBe(95 * 70);
+      expect(matrix.confidence.length).toBe(95 * 70);
+      expect(matrix.priors.length).toBe(95);
+      expect(matrix.characterEntityIndices.length).toBe(50);
+      expect(matrix.objectEntityIndices.length).toBe(45);
+    });
+
+    it("should provide normalized domain priors for characters and objects", () => {
+      const charPrior = matrix.getDomainPrior("character");
+      const objPrior = matrix.getDomainPrior("object");
+
+      let charSum = 0;
+      let objSum = 0;
+      for (let i = 0; i < matrix.numEntities; i++) {
+        charSum += charPrior[i];
+        objSum += objPrior[i];
+      }
+      expect(charSum).toBeCloseTo(1.0, 5);
+      expect(objSum).toBeCloseTo(1.0, 5);
+
+      // In charPrior, object entities have 0 probability
+      const phoneIdx = matrix.entityIdToIndex.get(51)!;
+      expect(charPrior[phoneIdx]).toBe(0);
+
+      // In objPrior, character entities have 0 probability
+      const einsteinIdx = matrix.entityIdToIndex.get(1)!;
+      expect(objPrior[einsteinIdx]).toBe(0);
     });
 
     it("should normalize priors such that sum equals 1.0", () => {
@@ -110,6 +134,16 @@ describe("Cognitor Bayesian Engine", () => {
       // Broad splitters have positive information gain and split the population well
       expect(rec!.expectedInfoGain).toBeGreaterThan(0.05);
       expect(rec!.score).toBeGreaterThan(0.1);
+    });
+
+    it("should select domain-specific questions for objects", () => {
+      const objPrior = engine.createInitialPosterior("object");
+      const asked = new Set<number>();
+      const rec = engine.selectNextQuestion(objPrior, asked, 0, false, "object");
+
+      expect(rec).not.toBeNull();
+      const qMeta = matrix.questions[rec!.questionIdx];
+      expect(qMeta.category === "object" || qMeta.category === "common").toBe(true);
     });
   });
 

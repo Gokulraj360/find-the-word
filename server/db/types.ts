@@ -4,6 +4,7 @@ export interface EntityRecord {
   description: string | null;
   imageUrl: string | null;
   popularity: number;
+  category?: "character" | "object";
   status: "active" | "pending";
   createdAt: Date;
 }
@@ -12,6 +13,7 @@ export interface QuestionRecord {
   id: number;
   text: string;
   source: "wikidata" | "llm" | "user";
+  category?: "character" | "object" | "common";
   qualityScore: number;
   timesAsked: number;
   isActive: boolean;
@@ -27,6 +29,7 @@ export interface EntityAnswerRecord {
 
 export interface GameSessionRecord {
   id: string;
+  domain?: "character" | "object";
   startedAt: Date;
   endedAt: Date | null;
   result: "win" | "lose" | "abandoned";
@@ -56,6 +59,7 @@ export interface SubmissionRecord {
   id: number;
   sessionId: string | null;
   entityName: string;
+  category?: "character" | "object";
   questionText: string;
   answer: number;
   closestWrongEntityId: number | null;
@@ -83,7 +87,7 @@ export interface IStorage {
   upsertEntityAnswer(entityId: number, questionId: number, delta: { yesW?: number; noW?: number; unknownW?: number }): Promise<void>;
   setEntityAnswer(entityId: number, questionId: number, values: { yesW: number; noW: number; unknownW: number }): Promise<void>;
 
-  createGameSession(id: string): Promise<GameSessionRecord>;
+  createGameSession(id: string, domain?: "character" | "object"): Promise<GameSessionRecord>;
   updateGameSession(id: string, data: Partial<GameSessionRecord>): Promise<GameSessionRecord>;
   getGameSession(id: string): Promise<GameSessionRecord | null>;
   getGameAnswers(sessionId: string): Promise<GameAnswerRecord[]>;
