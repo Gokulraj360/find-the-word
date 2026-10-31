@@ -102,19 +102,67 @@ export function createApiRouter(
 ): Router {
   const router = Router();
 
-  // Helper to fetch or recreate active session
-  function getSession(sessionId: string): GameSessionManager {
+  // Helper to fetch or auto-rehydrate active session
+  async function getSession(sessionId: string): Promise<GameSessionManager> {
     const cached = activeSessions.get(sessionId);
-    if (!cached) {
-      throw new Error(`Session ${sessionId} expired or not found. Please start a new game.`);
+    if (cached) {
+      cached.lastAccess = Date.now();
+      return cached.session;
     }
-    cached.lastAccess = Date.now();
-    return cached.session;
+
+    // Auto-rehydrate from storage / database (resilient to serverless and restarts)
+    const sessionRecord = await storage.getGameSession(sessionId);
+    if (!sessionRecord) {
+      throw new Error(`Session ${sessionId} not found. Please start a new game.`);
+    }
+
+    const answers = await storage.getGameAnswers(sessionId);
+    const sessionManager = new GameSessionManager(sessionId, matrix, engine);
+    sessionManager.start();
+
+    for (const ans of answers) {
+      sessionManager.answer(ans.answerValue);
+    }
+
+    activeSessions.set(sessionId, {
+      session: sessionManager,
+      lastAccess: Date.now()
+    });
+
+    return sessionManager;
   }
 
   // ---------------------------------------------------------------------------
   // PUBLIC GAME ROUTES
   // ---------------------------------------------------------------------------
+
+  /**
+   * GET /api/game/state/:sessionId
+   * Restores an active game session on browser refresh
+   */
+  router.get("/game/state/:sessionId", rateLimiter, async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.params.sessionId;
+      const sessionManager = await getSession(sessionId);
+      const curQ =
+        sessionManager.currentQuestionIdx !== null
+          ? {
+              id: matrix.questions[sessionManager.currentQuestionIdx].id,
+              text: matrix.questions[sessionManager.currentQuestionIdx].text,
+              step: sessionManager.stepCount + 1
+            }
+          : null;
+
+      res.json({
+        sessionId,
+        state: sessionManager.state,
+        question: curQ,
+        guess: sessionManager.pendingGuess
+      });
+    } catch (err: any) {
+      res.status(404).json({ error: err.message });
+    }
+  });
 
   /**
    * POST /api/game/start
@@ -155,7 +203,7 @@ export function createApiRouter(
       }
 
       const { sessionId, answer } = parsed.data;
-      const sessionManager = getSession(sessionId);
+      const sessionManager = await getSession(sessionId);
 
       // Record answer to DB
       if (sessionManager.currentQuestionIdx !== null) {
@@ -186,7 +234,7 @@ export function createApiRouter(
         return res.status(400).json({ error: "sessionId is required." });
       }
 
-      const sessionManager = getSession(sessionId);
+      const sessionManager = await getSession(sessionId);
       const outcome = sessionManager.undo();
 
       res.json({
@@ -210,7 +258,7 @@ export function createApiRouter(
       }
 
       const { sessionId, correct, entityId } = parsed.data;
-      const sessionManager = getSession(sessionId);
+      const sessionManager = await getSession(sessionId);
 
       // Record guess to DB
       await storage.recordGuess(sessionId, entityId, sessionManager.stepCount, correct);
@@ -244,7 +292,7 @@ export function createApiRouter(
       }
 
       const { sessionId, entityName, questionText, answer } = parsed.data;
-      const sessionManager = getSession(sessionId);
+      const sessionManager = await getSession(sessionId);
 
       const closestWrongId = sessionManager.guesses.length > 0
         ? sessionManager.guesses[sessionManager.guesses.length - 1].entityId

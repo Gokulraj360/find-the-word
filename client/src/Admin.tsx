@@ -37,6 +37,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
 
+  // Search & Pagination
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -114,6 +119,8 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (token) {
+      setSearchQuery("");
+      setCurrentPage(1);
       if (activeTab === "submissions") fetchSubmissions();
       else if (activeTab === "entities") fetchEntities();
       else if (activeTab === "questions") fetchQuestions();
@@ -195,6 +202,31 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
     );
   }
 
+  // Filter lists based on search
+  const filteredSubmissions = submissions.filter(
+    (s) =>
+      s.entityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.questionText.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredEntities = entities.filter(
+    (e) =>
+      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (e.description && e.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredQuestions = questions.filter((q) =>
+    q.text.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Pagination helper
+  const paginate = (items: any[]) => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return items.slice(startIndex, startIndex + PAGE_SIZE);
+  };
+
+  const totalPages = (count: number) => Math.max(1, Math.ceil(count / PAGE_SIZE));
+
   return (
     <div className="card" style={{ maxWidth: "100%", width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
@@ -218,73 +250,103 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
         </p>
       )}
 
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-        <button
-          className={`btn ${activeTab === "submissions" ? "btn-primary" : ""}`}
-          onClick={() => setActiveTab("submissions")}
-        >
-          Submissions Queue
-        </button>
-        <button
-          className={`btn ${activeTab === "entities" ? "btn-primary" : ""}`}
-          onClick={() => setActiveTab("entities")}
-        >
-          Entities
-        </button>
-        <button
-          className={`btn ${activeTab === "questions" ? "btn-primary" : ""}`}
-          onClick={() => setActiveTab("questions")}
-        >
-          Questions
-        </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            className={`btn ${activeTab === "submissions" ? "btn-primary" : ""}`}
+            onClick={() => setActiveTab("submissions")}
+          >
+            Submissions Queue ({submissions.length})
+          </button>
+          <button
+            className={`btn ${activeTab === "entities" ? "btn-primary" : ""}`}
+            onClick={() => setActiveTab("entities")}
+          >
+            Entities ({entities.length})
+          </button>
+          <button
+            className={`btn ${activeTab === "questions" ? "btn-primary" : ""}`}
+            onClick={() => setActiveTab("questions")}
+          >
+            Questions ({questions.length})
+          </button>
+        </div>
+
+        <input
+          type="text"
+          className="form-input"
+          style={{ width: 220, padding: "0.45rem 0.75rem", fontSize: "0.85rem" }}
+          placeholder="Filter items..."
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       {loading && <p style={{ color: "var(--text-muted)" }}>Loading data...</p>}
 
       {activeTab === "submissions" && (
         <div className="table-wrapper">
-          {submissions.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No submissions found in moderation queue.</p>
+          {filteredSubmissions.length === 0 ? (
+            <p style={{ color: "var(--text-muted)", padding: "1rem 0" }}>No submissions found.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Entity</th>
-                  <th>Distinguishing Question</th>
-                  <th>Answer</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {submissions.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.id}</td>
-                    <td><strong>{s.entityName}</strong></td>
-                    <td>{s.questionText}</td>
-                    <td>{s.answer >= 0.75 ? "Yes" : s.answer <= 0.25 ? "No" : "Unknown"}</td>
-                    <td>
-                      <span className={`badge badge-${s.status}`}>{s.status}</span>
-                    </td>
-                    <td>{new Date(s.createdAt).toLocaleDateString()}</td>
-                    <td>
-                      {s.status === "pending" && (
-                        <div style={{ display: "flex", gap: "0.5rem" }}>
-                          <button className="btn btn-success" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleApprove(s.id)}>
-                            Approve
-                          </button>
-                          <button className="btn btn-danger" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleReject(s.id)}>
-                            Reject
-                          </button>
-                        </div>
-                      )}
-                    </td>
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Entity</th>
+                    <th>Distinguishing Question</th>
+                    <th>Answer</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginate(filteredSubmissions).map((s: Submission) => (
+                    <tr key={s.id}>
+                      <td>{s.id}</td>
+                      <td><strong>{s.entityName}</strong></td>
+                      <td>{s.questionText}</td>
+                      <td>{s.answer >= 0.75 ? "Yes" : s.answer <= 0.25 ? "No" : "Unknown"}</td>
+                      <td>
+                        <span className={`badge badge-${s.status}`}>{s.status}</span>
+                      </td>
+                      <td>{new Date(s.createdAt).toLocaleDateString()}</td>
+                      <td>
+                        {s.status === "pending" && (
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button className="btn btn-success" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleApprove(s.id)}>
+                              Approve
+                            </button>
+                            <button className="btn btn-danger" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleReject(s.id)}>
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {totalPages(filteredSubmissions.length) > 1 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+                  <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                    Prev
+                  </button>
+                  <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                    Page {currentPage} of {totalPages(filteredSubmissions.length)}
+                  </span>
+                  <button className="btn" disabled={currentPage >= totalPages(filteredSubmissions.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -302,7 +364,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {entities.map((e) => (
+              {paginate(filteredEntities).map((e: EntityItem) => (
                 <tr key={e.id}>
                   <td>{e.id}</td>
                   <td><strong>{e.name}</strong></td>
@@ -315,6 +377,20 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               ))}
             </tbody>
           </table>
+
+          {totalPages(filteredEntities.length) > 1 && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+              <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                Prev
+              </button>
+              <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                Page {currentPage} of {totalPages(filteredEntities.length)}
+              </span>
+              <button className="btn" disabled={currentPage >= totalPages(filteredEntities.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                Next
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -331,7 +407,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {questions.map((q) => (
+              {paginate(filteredQuestions).map((q: QuestionItem) => (
                 <tr key={q.id}>
                   <td>{q.id}</td>
                   <td>{q.text}</td>
@@ -342,6 +418,20 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
               ))}
             </tbody>
           </table>
+
+          {totalPages(filteredQuestions.length) > 1 && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+              <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                Prev
+              </button>
+              <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                Page {currentPage} of {totalPages(filteredQuestions.length)}
+              </span>
+              <button className="btn" disabled={currentPage >= totalPages(filteredQuestions.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
+                Next
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

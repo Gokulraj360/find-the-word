@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: cognitor
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build:client && npx prisma generate
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true

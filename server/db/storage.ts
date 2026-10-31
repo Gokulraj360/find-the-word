@@ -93,26 +93,41 @@ export class InMemoryStorage implements IStorage {
     }
   }
 
+  private saveTimeout: NodeJS.Timeout | null = null;
+
   private saveSnapshot(): void {
     if (!this.persistenceFilePath) return;
-    try {
-      const dir = path.dirname(this.persistenceFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const data = {
-        entities: Array.from(this.entities.values()),
-        questions: Array.from(this.questions.values()),
-        entityAnswers: Array.from(this.entityAnswers.values()),
-        submissions: Array.from(this.submissions.values()),
-        entityIdCounter: this.entityIdCounter,
-        questionIdCounter: this.questionIdCounter,
-        submissionIdCounter: this.submissionIdCounter
-      };
-      fs.writeFileSync(this.persistenceFilePath, JSON.stringify(data, null, 2), "utf8");
-    } catch (err) {
-      console.warn("[InMemoryStorage] Failed to save snapshot:", err);
+    if (process.env.VERCEL) return; // Read-only filesystem on Vercel
+
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
     }
+
+    // Debounced asynchronous file write to prevent event-loop blocking
+    this.saveTimeout = setTimeout(() => {
+      try {
+        const dir = path.dirname(this.persistenceFilePath!);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        const data = {
+          entities: Array.from(this.entities.values()),
+          questions: Array.from(this.questions.values()),
+          entityAnswers: Array.from(this.entityAnswers.values()),
+          submissions: Array.from(this.submissions.values()),
+          entityIdCounter: this.entityIdCounter,
+          questionIdCounter: this.questionIdCounter,
+          submissionIdCounter: this.submissionIdCounter
+        };
+        fs.promises
+          .writeFile(this.persistenceFilePath!, JSON.stringify(data, null, 2), "utf8")
+          .catch((err) => {
+            console.warn("[InMemoryStorage] Failed to save snapshot asynchronously:", err.message);
+          });
+      } catch (err: any) {
+        console.warn("[InMemoryStorage] Snapshot schedule error:", err.message);
+      }
+    }, 150);
   }
 
   private loadFromDump(data: any): void {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { AdminPanel } from "./Admin.js";
 
 interface Question {
@@ -37,6 +37,8 @@ export default function App() {
   const [gameState, setGameState] = useState<"idle" | "in_progress" | "guess_pending" | "won" | "lost">("idle");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [lastAction, setLastAction] = useState<(() => void) | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
 
   // Learn form state
   const [learnName, setLearnName] = useState("");
@@ -52,13 +54,41 @@ export default function App() {
         const data = await res.json();
         setStats(data);
       }
-    } catch (e) {
+    } catch {
       // ignore
+    }
+  };
+
+  // Restore session from sessionStorage if page was refreshed
+  const tryRestoreSession = async () => {
+    const savedId = sessionStorage.getItem("cognitor_session_id");
+    if (!savedId) return;
+
+    try {
+      const res = await fetch(`/api/game/state/${savedId}`);
+      if (!res.ok) {
+        sessionStorage.removeItem("cognitor_session_id");
+        return;
+      }
+      const data = await res.json();
+      if (data.state === "in_progress" && data.question) {
+        setSessionId(data.sessionId);
+        setCurrentQuestion(data.question);
+        setGameState("in_progress");
+      } else if (data.state === "guess_pending" && data.guess) {
+        setSessionId(data.sessionId);
+        setGuess(data.guess);
+        setGameState("guess_pending");
+      }
+    } catch {
+      sessionStorage.removeItem("cognitor_session_id");
     }
   };
 
   useEffect(() => {
     fetchStats();
+    tryRestoreSession();
+
     const handlePopState = () => {
       setIsAdminRoute(window.location.pathname === "/admin" || window.location.hash === "#admin");
     };
@@ -81,60 +111,76 @@ export default function App() {
   const startGame = async () => {
     setLoading(true);
     setErrorMsg("");
+    setLastAction(null);
     setLearnSubmitted(false);
     setLearnName("");
     setLearnQuestion("");
     setClosestWrongEntity(null);
+    setImageFailed(false);
+    sessionStorage.removeItem("cognitor_session_id");
+
     try {
       const res = await fetch("/api/game/start", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start game");
       setSessionId(data.sessionId);
+      sessionStorage.setItem("cognitor_session_id", data.sessionId);
       setCurrentQuestion(data.question);
       setGuess(null);
       setGameState("in_progress");
     } catch (err: any) {
       setErrorMsg(err.message);
+      setLastAction(() => startGame);
     } finally {
       setLoading(false);
     }
   };
 
   // Submit answer
-  const submitAnswer = async (answerVal: number) => {
-    if (!sessionId || loading) return;
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      const res = await fetch("/api/game/answer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, answer: answerVal })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to process answer");
+  const submitAnswer = useCallback(
+    async (answerVal: number) => {
+      if (!sessionId || loading) return;
+      setLoading(true);
+      setErrorMsg("");
+      setLastAction(null);
 
-      if (data.state === "guess_pending" && data.guess) {
-        setGuess(data.guess);
-        setGameState("guess_pending");
-      } else if (data.state === "in_progress" && data.question) {
-        setCurrentQuestion(data.question);
-        setGameState("in_progress");
-      } else if (data.state === "lost") {
-        setGameState("lost");
+      try {
+        const res = await fetch("/api/game/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, answer: answerVal })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to process answer");
+
+        if (data.state === "guess_pending" && data.guess) {
+          setGuess(data.guess);
+          setImageFailed(false);
+          setGameState("guess_pending");
+        } else if (data.state === "in_progress" && data.question) {
+          setCurrentQuestion(data.question);
+          setGameState("in_progress");
+        } else if (data.state === "lost") {
+          sessionStorage.removeItem("cognitor_session_id");
+          setGameState("lost");
+        }
+      } catch (err: any) {
+        setErrorMsg(err.message);
+        setLastAction(() => () => submitAnswer(answerVal));
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [sessionId, loading]
+  );
 
   // Back / Undo
-  const handleBack = async () => {
+  const handleBack = useCallback(async () => {
     if (!sessionId || loading || (currentQuestion && currentQuestion.step <= 1)) return;
     setLoading(true);
     setErrorMsg("");
+    setLastAction(null);
+
     try {
       const res = await fetch("/api/game/back", {
         method: "POST",
@@ -146,58 +192,94 @@ export default function App() {
 
       setCurrentQuestion(data.question);
       setGuess(null);
+      setImageFailed(false);
       setGameState("in_progress");
     } catch (err: any) {
       setErrorMsg(err.message);
+      setLastAction(() => handleBack);
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, loading, currentQuestion]);
 
   // Confirm guess
-  const confirmGuess = async (correct: boolean) => {
-    if (!sessionId || !guess || loading) return;
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      const res = await fetch("/api/game/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          correct,
-          entityId: guess.entityId
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to confirm guess");
+  const confirmGuess = useCallback(
+    async (correct: boolean) => {
+      if (!sessionId || !guess || loading) return;
+      setLoading(true);
+      setErrorMsg("");
+      setLastAction(null);
 
-      if (correct || data.state === "won") {
-        setGameState("won");
-        fetchStats();
-      } else {
-        // Rejected guess
-        if (data.closestWrongEntity) {
-          setClosestWrongEntity(data.closestWrongEntity);
-        } else {
-          setClosestWrongEntity(guess);
-        }
+      try {
+        const res = await fetch("/api/game/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            correct,
+            entityId: guess.entityId
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to confirm guess");
 
-        if (data.state === "lost") {
-          setGameState("lost");
+        if (correct || data.state === "won") {
+          sessionStorage.removeItem("cognitor_session_id");
+          setGameState("won");
           fetchStats();
-        } else if (data.question) {
-          setCurrentQuestion(data.question);
-          setGuess(null);
-          setGameState("in_progress");
+        } else {
+          // Rejected guess
+          if (data.closestWrongEntity) {
+            setClosestWrongEntity(data.closestWrongEntity);
+          } else {
+            setClosestWrongEntity(guess);
+          }
+
+          if (data.state === "lost") {
+            sessionStorage.removeItem("cognitor_session_id");
+            setGameState("lost");
+            fetchStats();
+          } else if (data.question) {
+            setCurrentQuestion(data.question);
+            setGuess(null);
+            setImageFailed(false);
+            setGameState("in_progress");
+          }
         }
+      } catch (err: any) {
+        setErrorMsg(err.message);
+        setLastAction(() => () => confirmGuess(correct));
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [sessionId, guess, loading]
+  );
+
+  // Keyboard shortcuts listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in form input
+      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      if (gameState === "in_progress") {
+        if (e.key === "1" || e.key.toLowerCase() === "y") submitAnswer(1.0);
+        else if (e.key === "2" || e.key.toLowerCase() === "p") submitAnswer(0.75);
+        else if (e.key === "3" || e.key.toLowerCase() === "d") submitAnswer(0.5);
+        else if (e.key === "4") submitAnswer(0.25);
+        else if (e.key === "5" || e.key.toLowerCase() === "n") submitAnswer(0.0);
+        else if (e.key === "Backspace" || e.key.toLowerCase() === "u") handleBack();
+      } else if (gameState === "guess_pending") {
+        if (e.key.toLowerCase() === "y" || e.key === "Enter") confirmGuess(true);
+        else if (e.key.toLowerCase() === "n" || e.key === "Escape") confirmGuess(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gameState, submitAnswer, handleBack, confirmGuess]);
 
   // Submit learning form on loss
   const handleLearnSubmit = async (e: React.FormEvent) => {
@@ -231,7 +313,14 @@ export default function App() {
     <div className="container">
       <header>
         <div style={{ display: "flex", alignItems: "baseline" }}>
-          <a href="/" onClick={(e) => { e.preventDefault(); navigateToHome(); }} className="logo-title">
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigateToHome();
+            }}
+            className="logo-title"
+          >
             Cognitor
           </a>
           <span className="logo-sub">Bayesian Mind Guesser</span>
@@ -250,9 +339,14 @@ export default function App() {
       </header>
 
       {errorMsg && (
-        <p style={{ background: "rgba(239,68,68,0.15)", color: "var(--danger)", padding: "0.75rem", borderRadius: 6, marginBottom: "1rem" }}>
-          {errorMsg}
-        </p>
+        <div style={{ background: "rgba(239,68,68,0.15)", color: "var(--danger)", padding: "0.75rem", borderRadius: 6, marginBottom: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{errorMsg}</span>
+          {lastAction && (
+            <button className="btn btn-danger" style={{ padding: "0.25rem 0.6rem", fontSize: "0.8rem" }} onClick={lastAction}>
+              Retry
+            </button>
+          )}
+        </div>
       )}
 
       {isAdminRoute ? (
@@ -287,6 +381,10 @@ export default function App() {
               <button className="btn btn-primary" onClick={startGame} disabled={loading} style={{ fontSize: "1.1rem", padding: "0.85rem 2.5rem" }}>
                 {loading ? "Starting..." : "Start Game"}
               </button>
+
+              <div style={{ marginTop: "1.5rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                Tip: You can use keyboard keys <code>1-5</code> or <code>Y/P/D/N</code> during play.
+              </div>
             </div>
           )}
 
@@ -294,33 +392,38 @@ export default function App() {
           {gameState === "in_progress" && currentQuestion && (
             <div className="card">
               <div className="question-header">
-                <span className="question-counter">Question #{currentQuestion.step}</span>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Active Engine</span>
+                <div>
+                  <span className="question-counter">Question #{currentQuestion.step}</span>
+                  <div className="progress-bar-container" style={{ width: 140, height: 4, background: "var(--border-color)", borderRadius: 2, marginTop: 4 }}>
+                    <div style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%`, height: "100%", background: "var(--accent)", borderRadius: 2, transition: "width 0.25s ease" }} />
+                  </div>
+                </div>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Bayesian Engine</span>
               </div>
 
               <div className="question-text">{currentQuestion.text}</div>
 
               <div className="answer-grid">
                 <button className="btn" onClick={() => submitAnswer(1.0)} disabled={loading}>
-                  Yes
+                  Yes <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(1)</span>
                 </button>
                 <button className="btn" onClick={() => submitAnswer(0.75)} disabled={loading}>
-                  Probably
+                  Probably <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(2)</span>
                 </button>
                 <button className="btn" onClick={() => submitAnswer(0.5)} disabled={loading}>
-                  Don't know
+                  Don't know <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(3)</span>
                 </button>
                 <button className="btn" onClick={() => submitAnswer(0.25)} disabled={loading}>
-                  Probably not
+                  Probably not <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(4)</span>
                 </button>
                 <button className="btn" onClick={() => submitAnswer(0.0)} disabled={loading}>
-                  No
+                  No <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(5)</span>
                 </button>
               </div>
 
               <div className="controls-row">
-                <button className="btn" onClick={handleBack} disabled={loading || currentQuestion.step <= 1} title="Undo last answer">
-                  ← Back
+                <button className="btn" onClick={handleBack} disabled={loading || currentQuestion.step <= 1} title="Undo last answer (Backspace)">
+                  ← Back <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(Undo)</span>
                 </button>
                 <button className="btn" onClick={startGame} disabled={loading} title="Restart game">
                   Restart
@@ -336,13 +439,20 @@ export default function App() {
                 Cognitor's Deduction
               </span>
 
-              {guess.imageUrl && (
+              {guess.imageUrl && !imageFailed ? (
                 <img
                   src={guess.imageUrl}
                   alt={guess.name}
                   className="guess-image"
-                  onError={(e) => { (e.currentTarget as HTMLElement).style.display = "none"; }}
+                  onError={() => setImageFailed(true)}
                 />
+              ) : (
+                <div
+                  className="guess-image"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", color: "var(--text-muted)" }}
+                >
+                  👤
+                </div>
               )}
 
               <h2 className="guess-name">{guess.name}</h2>
@@ -354,10 +464,10 @@ export default function App() {
 
               <div className="guess-actions">
                 <button className="btn btn-success" onClick={() => confirmGuess(true)} disabled={loading}>
-                  Yes, that's it!
+                  Yes, that's it! <span style={{ opacity: 0.7, fontSize: "0.75rem" }}>(Y)</span>
                 </button>
                 <button className="btn btn-danger" onClick={() => confirmGuess(false)} disabled={loading}>
-                  No
+                  No <span style={{ opacity: 0.7, fontSize: "0.75rem" }}>(N)</span>
                 </button>
               </div>
             </div>
