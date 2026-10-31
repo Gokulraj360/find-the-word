@@ -266,7 +266,6 @@ export default function App() {
   // Keyboard shortcuts listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in form input
       if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -318,35 +317,33 @@ export default function App() {
 
   return (
     <div className="container">
-      <header>
-        <div style={{ display: "flex", alignItems: "baseline" }}>
-          <a
-            href="/"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateToHome();
+      <header className="app-header">
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateToHome();
+          }}
+          className="brand-link"
+        >
+          Cognitor
+        </a>
+
+        {gameState !== "idle" && !isAdminRoute && (
+          <button
+            className="header-action"
+            onClick={() => {
+              setGameState("idle");
+              sessionStorage.removeItem("cognitor_session_id");
             }}
-            className="logo-title"
           >
-            Cognitor
-          </a>
-          <span className="logo-sub">Bayesian Mind Guesser</span>
-        </div>
-        <nav>
-          {isAdminRoute ? (
-            <button className="btn" onClick={navigateToHome} style={{ padding: "0.3rem 0.75rem", fontSize: "0.85rem" }}>
-              Play Game
-            </button>
-          ) : (
-            <button className="btn" onClick={navigateToAdmin} style={{ padding: "0.3rem 0.75rem", fontSize: "0.85rem" }}>
-              Admin Panel
-            </button>
-          )}
-        </nav>
+            New Game
+          </button>
+        )}
       </header>
 
       {errorMsg && (
-        <div style={{ background: "rgba(239,68,68,0.15)", color: "var(--danger)", padding: "0.75rem", borderRadius: 6, marginBottom: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", padding: "0.75rem 1rem", borderRadius: 8, marginBottom: "1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span>{errorMsg}</span>
           {lastAction && (
             <button className="btn btn-danger" style={{ padding: "0.25rem 0.6rem", fontSize: "0.8rem" }} onClick={lastAction}>
@@ -362,123 +359,107 @@ export default function App() {
         <>
           {/* IDLE / START SCREEN */}
           {gameState === "idle" && (
-            <div className="card" style={{ textAlign: "center" }}>
-              <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>Cognitor</h1>
-              <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "1.05rem" }}>
-                Select a category below. Think of any famous figure or everyday object, answer questions, and I will deduce your thought using Bayesian inference.
+            <div className="card">
+              <h1 className="card-title">Cognitor</h1>
+              <p className="card-subtitle">
+                Think of a person or an everyday object. Answer questions, and the engine will deduce who or what you are thinking of.
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+              <div className="category-picker-grid">
                 <button
-                  className="btn btn-primary"
+                  className="category-card"
                   onClick={() => startGame("character")}
                   disabled={loading}
-                  style={{
-                    padding: "1.5rem 1rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    background: "var(--card-bg)",
-                    border: "2px solid var(--accent)",
-                    color: "var(--text-main)",
-                    cursor: "pointer"
-                  }}
                 >
-                  <span style={{ fontSize: "2.2rem" }}>👤</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--accent)" }}>Living Things & Characters</span>
-                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 400, lineHeight: 1.4 }}>
-                    Real people, historical figures, celebrities, athletes, fictional heroes, or anime
+                  <span className="category-card-badge">Living & Fictional</span>
+                  <span className="category-card-name">Characters & Figures</span>
+                  <span className="category-card-desc">
+                    Real people, celebrities, historical figures, and fictional characters.
                   </span>
                 </button>
 
                 <button
-                  className="btn btn-primary"
+                  className="category-card"
                   onClick={() => startGame("object")}
                   disabled={loading}
-                  style={{
-                    padding: "1.5rem 1rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    background: "var(--card-bg)",
-                    border: "2px solid var(--accent)",
-                    color: "var(--text-main)",
-                    cursor: "pointer"
-                  }}
                 >
-                  <span style={{ fontSize: "2.2rem" }}>💡</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--accent)" }}>Objects & Everyday Items</span>
-                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 400, lineHeight: 1.4 }}>
-                    Tools, electronic gadgets, household appliances, vehicles, instruments, or goods
+                  <span className="category-card-badge">Everyday Items</span>
+                  <span className="category-card-name">Objects & Items</span>
+                  <span className="category-card-desc">
+                    Tools, appliances, electronic gadgets, vehicles, and household items.
                   </span>
                 </button>
               </div>
 
               {stats && (
-                <div className="stats-grid">
-                  <div className="stat-box">
-                    <div className="stat-number">{stats.activeEntities}</div>
-                    <div className="stat-label">Total Entities</div>
-                  </div>
-                  <div className="stat-box">
-                    <div className="stat-number">{stats.activeQuestions}</div>
-                    <div className="stat-label">Questions</div>
-                  </div>
-                  <div className="stat-box">
-                    <div className="stat-number">{stats.wins}</div>
-                    <div className="stat-label">Victories</div>
-                  </div>
+                <div className="stats-strip">
+                  <span>{stats.activeEntities} active entries</span>
+                  <span>{stats.activeQuestions} traits</span>
+                  <span>{stats.wins} deductions</span>
                 </div>
               )}
-
-              <div style={{ marginTop: "1rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                Tip: You can use keyboard keys <code>1-5</code> or <code>Y/P/D/N</code> during play.
-              </div>
             </div>
           )}
 
           {/* ACTIVE QUESTION SCREEN */}
           {gameState === "in_progress" && currentQuestion && (
             <div className="card">
-              <div className="question-header">
-                <div>
-                  <span className="question-counter">Question #{currentQuestion.step}</span>
-                  <div className="progress-bar-container" style={{ width: 140, height: 4, background: "var(--border-color)", borderRadius: 2, marginTop: 4 }}>
-                    <div style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%`, height: "100%", background: "var(--accent)", borderRadius: 2, transition: "width 0.25s ease" }} />
+              <div className="question-header-row">
+                <div className="step-indicator">
+                  <span>Question {currentQuestion.step}</span>
+                  <div className="progress-track">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%` }}
+                    />
                   </div>
                 </div>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  {currentDomain === "object" ? "💡 Objects Mode" : "👤 Characters Mode"} • Bayesian Engine
+
+                <span className="domain-pill">
+                  {currentDomain === "object" ? "Objects" : "Characters"}
                 </span>
               </div>
 
-              <div className="question-text">{currentQuestion.text}</div>
+              <div className="question-prompt">{currentQuestion.text}</div>
 
-              <div className="answer-grid">
-                <button className="btn" onClick={() => submitAnswer(1.0)} disabled={loading}>
-                  Yes <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(1)</span>
+              <div className="answer-list">
+                <button className="answer-btn" onClick={() => submitAnswer(1.0)} disabled={loading}>
+                  <span>Yes</span>
+                  <kbd className="kbd-badge">1</kbd>
                 </button>
-                <button className="btn" onClick={() => submitAnswer(0.75)} disabled={loading}>
-                  Probably <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(2)</span>
+                <button className="answer-btn" onClick={() => submitAnswer(0.75)} disabled={loading}>
+                  <span>Probably</span>
+                  <kbd className="kbd-badge">2</kbd>
                 </button>
-                <button className="btn" onClick={() => submitAnswer(0.5)} disabled={loading}>
-                  Don't know <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(3)</span>
+                <button className="answer-btn" onClick={() => submitAnswer(0.5)} disabled={loading}>
+                  <span>Don't know</span>
+                  <kbd className="kbd-badge">3</kbd>
                 </button>
-                <button className="btn" onClick={() => submitAnswer(0.25)} disabled={loading}>
-                  Probably not <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(4)</span>
+                <button className="answer-btn" onClick={() => submitAnswer(0.25)} disabled={loading}>
+                  <span>Probably not</span>
+                  <kbd className="kbd-badge">4</kbd>
                 </button>
-                <button className="btn" onClick={() => submitAnswer(0.0)} disabled={loading}>
-                  No <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(5)</span>
+                <button className="answer-btn" onClick={() => submitAnswer(0.0)} disabled={loading}>
+                  <span>No</span>
+                  <kbd className="kbd-badge">5</kbd>
                 </button>
               </div>
 
-              <div className="controls-row">
-                <button className="btn" onClick={handleBack} disabled={loading || currentQuestion.step <= 1} title="Undo last answer (Backspace)">
-                  ← Back <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>(Undo)</span>
+              <div className="action-row">
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleBack}
+                  disabled={loading || currentQuestion.step <= 1}
+                  title="Undo last answer (Backspace)"
+                >
+                  Undo
                 </button>
-                <button className="btn" onClick={() => startGame(currentDomain)} disabled={loading} title="Restart game">
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => startGame(currentDomain)}
+                  disabled={loading}
+                  title="Restart game"
+                >
                   Restart
                 </button>
               </div>
@@ -487,40 +468,48 @@ export default function App() {
 
           {/* GUESS CARD */}
           {gameState === "guess_pending" && guess && (
-            <div className="card guess-card">
-              <span className="question-counter" style={{ display: "block", marginBottom: "1rem" }}>
-                Cognitor's Deduction
-              </span>
+            <div className="card guess-container">
+              <span className="guess-label">Deduction</span>
 
-              {guess.imageUrl && !imageFailed ? (
-                <img
-                  src={guess.imageUrl}
-                  alt={guess.name}
-                  className="guess-image"
-                  onError={() => setImageFailed(true)}
-                />
-              ) : (
-                <div
-                  className="guess-image"
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", color: "var(--text-muted)" }}
-                >
-                  {currentDomain === "object" ? "📦" : "👤"}
-                </div>
-              )}
+              <div className="guess-media">
+                {guess.imageUrl && !imageFailed ? (
+                  <img
+                    src={guess.imageUrl}
+                    alt={guess.name}
+                    className="guess-image"
+                    referrerPolicy="no-referrer"
+                    onError={() => setImageFailed(true)}
+                  />
+                ) : (
+                  <div className="guess-image-fallback">
+                    <span className="guess-fallback-initial">
+                      {guess.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-              <h2 className="guess-name">{guess.name}</h2>
-              {guess.description && <p className="guess-desc">{guess.description}</p>}
+              <h2 className="guess-title">{guess.name}</h2>
+              {guess.description && <p className="guess-summary">{guess.description}</p>}
 
-              <p style={{ marginBottom: "1.5rem", fontWeight: 500, fontSize: "1.1rem" }}>
-                Are you thinking of this {currentDomain === "object" ? "object" : "character"}?
+              <p className="guess-question">
+                Is this what you were thinking of?
               </p>
 
-              <div className="guess-actions">
-                <button className="btn btn-success" onClick={() => confirmGuess(true)} disabled={loading}>
-                  Yes, that's it! <span style={{ opacity: 0.7, fontSize: "0.75rem" }}>(Y)</span>
+              <div className="guess-button-group">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => confirmGuess(true)}
+                  disabled={loading}
+                >
+                  Yes, that's it
                 </button>
-                <button className="btn btn-danger" onClick={() => confirmGuess(false)} disabled={loading}>
-                  No <span style={{ opacity: 0.7, fontSize: "0.75rem" }}>(N)</span>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => confirmGuess(false)}
+                  disabled={loading}
+                >
+                  No, keep guessing
                 </button>
               </div>
             </div>
@@ -528,19 +517,24 @@ export default function App() {
 
           {/* WON SCREEN */}
           {gameState === "won" && (
-            <div className="card" style={{ textAlign: "center" }}>
-              <h2 style={{ fontSize: "1.8rem", color: "var(--success)", marginBottom: "0.5rem" }}>
-                Guessed It!
-              </h2>
-              <p style={{ color: "var(--text-muted)", marginBottom: "2rem" }}>
-                I successfully deduced your {currentDomain === "object" ? "object" : "character"} using Bayesian inference! Soft counts and popularity have been updated in the learning loop.
+            <div className="card result-container">
+              <span className="result-badge">Confirmed</span>
+              <h2 className="result-heading">Thought Deduced</h2>
+              <p className="result-desc">
+                Successfully deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions.
               </p>
-              <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-                <button className="btn btn-primary" onClick={() => startGame(currentDomain)} style={{ padding: "0.85rem 1.8rem" }}>
-                  Play Again ({currentDomain === "object" ? "Objects" : "Characters"})
+              <div className="result-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => startGame(currentDomain)}
+                >
+                  Play Again
                 </button>
-                <button className="btn" onClick={() => startGame(currentDomain === "object" ? "character" : "object")} style={{ padding: "0.85rem 1.8rem" }}>
-                  Switch to {currentDomain === "object" ? "Characters" : "Objects"}
+                <button
+                  className="btn"
+                  onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
+                >
+                  Switch Category
                 </button>
               </div>
             </div>
@@ -548,16 +542,17 @@ export default function App() {
 
           {/* LOST & LEARN FORM SCREEN */}
           {gameState === "lost" && (
-            <div className="card">
-              <h2 style={{ fontSize: "1.6rem", marginBottom: "0.5rem" }}>You Defeated Me!</h2>
-              <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-                I could not guess your {currentDomain === "object" ? "object" : "character"} within my limits. Teach me so I can guess it next time!
+            <div className="card result-container">
+              <span className="result-badge">Game Finished</span>
+              <h2 className="result-heading">You Won</h2>
+              <p className="result-desc">
+                The engine was unable to deduce your thought within question limits. Add it below to expand the knowledge base.
               </p>
 
               {learnSubmitted ? (
-                <div style={{ textAlign: "center", padding: "1.5rem" }}>
-                  <p style={{ color: "var(--success)", fontSize: "1.1rem", marginBottom: "1.5rem" }}>
-                    ✓ Thank you! Your {currentDomain === "object" ? "object" : "character"} and distinguishing question have been submitted for moderation.
+                <div style={{ padding: "1.5rem 0" }}>
+                  <p style={{ color: "var(--success)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
+                    Thank you. Your submission has been sent for moderation.
                   </p>
                   <button className="btn btn-primary" onClick={() => startGame(currentDomain)}>
                     Play Again
@@ -572,7 +567,7 @@ export default function App() {
                     <input
                       type="text"
                       className="form-input"
-                      placeholder={currentDomain === "object" ? "e.g. Acoustic Guitar, Microwave" : "e.g. Luke Skywalker, Alan Turing"}
+                      placeholder={currentDomain === "object" ? "e.g. Acoustic Guitar, Microwave" : "e.g. Alan Turing, Marie Curie"}
                       value={learnName}
                       onChange={(e) => setLearnName(e.target.value)}
                       required
@@ -581,13 +576,13 @@ export default function App() {
 
                   <div className="form-group">
                     <label className="form-label">
-                      A question that tells them apart from{" "}
-                      <strong>{closestWrongEntity ? closestWrongEntity.name : "my closest guess"}</strong>:
+                      A question distinguishing them from{" "}
+                      <strong>{closestWrongEntity ? closestWrongEntity.name : "the closest guess"}</strong>:
                     </label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder={currentDomain === "object" ? "e.g. Does it produce musical notes?" : "e.g. Does your character use a green lightsaber?"}
+                      placeholder={currentDomain === "object" ? "e.g. Does it produce musical notes?" : "e.g. Did they discover radioactivity?"}
                       value={learnQuestion}
                       onChange={(e) => setLearnQuestion(e.target.value)}
                       required
@@ -596,7 +591,7 @@ export default function App() {
 
                   <div className="form-group">
                     <label className="form-label">
-                      What is the answer for your {currentDomain === "object" ? "object" : "character"}?
+                      Correct answer for your selection:
                     </label>
                     <select
                       className="form-select"
@@ -613,10 +608,10 @@ export default function App() {
 
                   <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
                     <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
-                      {loading ? "Submitting..." : "Teach Cognitor"}
+                      {loading ? "Submitting..." : "Submit Entry"}
                     </button>
                     <button type="button" className="btn" onClick={() => startGame(currentDomain)}>
-                      Skip & Play Again
+                      Skip
                     </button>
                   </div>
                 </form>
@@ -626,8 +621,19 @@ export default function App() {
         </>
       )}
 
-      <footer>
-        Cognitor Engine • Powered by Bayesian Inference & Beta Priors • In-Memory Matrix
+      <footer className="app-footer">
+        <span>Cognitor</span>
+        <span>·</span>
+        <a
+          href="/admin"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateToAdmin();
+          }}
+          className="admin-footer-link"
+        >
+          Admin
+        </a>
       </footer>
     </div>
   );

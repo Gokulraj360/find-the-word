@@ -236,7 +236,7 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
         <h2>Cognitor Moderation & Admin</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button className="btn" onClick={handleReloadCache} title="Reload in-memory Float32Array matrix">
-            🔄 Reload Cache
+            Reload Cache
           </button>
           <button className="btn" onClick={handleLogout}>
             Logout
@@ -314,8 +314,8 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
                     <tr key={s.id}>
                       <td>{s.id}</td>
                       <td>
-                        <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
-                          {s.category === "object" ? "💡 Object" : "👤 Character"}
+                        <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
+                          {s.category === "object" ? "Object" : "Character"}
                         </span>
                       </td>
                       <td><strong>{s.entityName}</strong></td>
@@ -378,8 +378,8 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
                 <tr key={e.id}>
                   <td>{e.id}</td>
                   <td>
-                    <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
-                      {e.category === "object" ? "💡 Object" : "👤 Character"}
+                    <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
+                      {e.category === "object" ? "Object" : "Character"}
                     </span>
                   </td>
                   <td><strong>{e.name}</strong></td>
@@ -427,8 +427,8 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
                 <tr key={q.id}>
                   <td>{q.id}</td>
                   <td>
-                    <span className="badge" style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)" }}>
-                      {q.category === "object" ? "💡 Object" : q.category === "common" ? "🌐 Common" : "👤 Character"}
+                    <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
+                      {q.category === "object" ? "Object" : q.category === "common" ? "Common" : "Character"}
                     </span>
                   </td>
                   <td>{q.text}</td>
