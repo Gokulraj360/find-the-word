@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { AdminPanel } from "./Admin.js";
+import { OracleAvatar, OracleMood } from "./OracleAvatar.js";
+import { sounds } from "./soundEffects.js";
 
 interface Question {
   id: number;
@@ -33,18 +35,18 @@ interface Stats {
 
 function answerLabel(val: number): string {
   if (val >= 0.95) return "Yes";
+  if (val <= 0.05) return "No";
   if (val >= 0.7) return "Probably";
-  if (val >= 0.4) return "Don't know";
-  if (val >= 0.2) return "Probably not";
-  return "No";
+  if (val <= 0.3) return "Probably not";
+  return "Don't know";
 }
 
 function answerBadgeClass(val: number): string {
-  if (val >= 0.95) return "badge-ans-yes";
-  if (val >= 0.7) return "badge-ans-prob";
-  if (val >= 0.4) return "badge-ans-dk";
-  if (val >= 0.2) return "badge-ans-probnot";
-  return "badge-ans-no";
+  if (val >= 0.95) return "ans-pill-yes";
+  if (val <= 0.05) return "ans-pill-no";
+  if (val >= 0.7) return "ans-pill-prob";
+  if (val <= 0.3) return "ans-pill-probnot";
+  return "ans-pill-dk";
 }
 
 export default function App() {
@@ -61,12 +63,14 @@ export default function App() {
   const [guess, setGuess] = useState<CandidateGuess | null>(null);
   const [closestWrongEntity, setClosestWrongEntity] = useState<CandidateGuess | null>(null);
   const [gameState, setGameState] = useState<"idle" | "in_progress" | "guess_pending" | "won" | "lost">("idle");
+  const [oracleMood, setOracleMood] = useState<OracleMood>("idle");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [lastAction, setLastAction] = useState<(() => void) | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const [fallbackImage, setFallbackImage] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(sounds.enabled);
 
   // Learn form state
   const [learnName, setLearnName] = useState("");
@@ -123,10 +127,12 @@ export default function App() {
         setSessionId(data.sessionId);
         setCurrentQuestion(data.question);
         setGameState("in_progress");
+        setOracleMood(data.certainty >= 0.65 ? "confident" : "idle");
       } else if (data.state === "guess_pending" && data.guess) {
         setSessionId(data.sessionId);
         setGuess(data.guess);
         setGameState("guess_pending");
+        setOracleMood("guessing");
       }
     } catch {
       sessionStorage.removeItem("cognitor_session_id");
@@ -155,6 +161,11 @@ export default function App() {
     fetchStats();
   };
 
+  const toggleSound = () => {
+    const next = sounds.toggle();
+    setSoundEnabled(next);
+  };
+
   // Start new game
   const startGame = async (domain: "character" | "object" = "character") => {
     setLoading(true);
@@ -168,6 +179,7 @@ export default function App() {
     setFallbackImage(null);
     setShowHistory(false);
     setCurrentDomain(domain);
+    setOracleMood("thinking");
     sessionStorage.removeItem("cognitor_session_id");
 
     try {
@@ -185,8 +197,10 @@ export default function App() {
       if (data.history) setHistory(data.history);
       setGuess(null);
       setGameState("in_progress");
+      setOracleMood("idle");
     } catch (err: any) {
       setErrorMsg(err.message);
+      setOracleMood("idle");
       setLastAction(() => () => startGame(domain));
     } finally {
       setLoading(false);
@@ -200,6 +214,12 @@ export default function App() {
       setLoading(true);
       setErrorMsg("");
       setLastAction(null);
+
+      // Play audio chime
+      sounds.playAnswerChime(answerVal);
+
+      // Momentary thinking expression
+      setOracleMood("thinking");
 
       try {
         const res = await fetch("/api/game/answer", {
@@ -218,24 +238,32 @@ export default function App() {
           setImageFailed(false);
           setFallbackImage(null);
           setGameState("guess_pending");
+          setOracleMood("guessing");
+          sounds.playDeductionReveal();
+
           if (!data.guess.imageUrl) {
             resolveEntityImage(data.guess.name);
           }
         } else if (data.state === "in_progress" && data.question) {
           setCurrentQuestion(data.question);
           setGameState("in_progress");
+          // Update mood based on certainty
+          const nextCert = data.certainty ?? certainty;
+          setOracleMood(nextCert >= 0.65 ? "confident" : "idle");
         } else if (data.state === "lost") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("lost");
+          setOracleMood("defeated");
         }
       } catch (err: any) {
         setErrorMsg(err.message);
+        setOracleMood("idle");
         setLastAction(() => () => submitAnswer(answerVal));
       } finally {
         setLoading(false);
       }
     },
-    [sessionId, loading]
+    [sessionId, loading, certainty]
   );
 
   // Back / Undo
@@ -261,6 +289,7 @@ export default function App() {
       setImageFailed(false);
       setFallbackImage(null);
       setGameState("in_progress");
+      setOracleMood(data.certainty >= 0.65 ? "confident" : "idle");
     } catch (err: any) {
       setErrorMsg(err.message);
       setLastAction(() => handleBack);
@@ -293,6 +322,7 @@ export default function App() {
         if (lastData.history) setHistory(lastData.history);
         setGuess(null);
         setGameState("in_progress");
+        setOracleMood(lastData.certainty >= 0.65 ? "confident" : "idle");
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -328,9 +358,12 @@ export default function App() {
         if (correct || data.state === "won") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("won");
+          setOracleMood("confident");
+          sounds.playVictory();
           fetchStats();
         } else {
-          // Rejected guess
+          // Rejected guess: Oracle is stumped and continues
+          setOracleMood("stumped");
           if (data.closestWrongEntity) {
             setClosestWrongEntity(data.closestWrongEntity);
           } else {
@@ -340,6 +373,7 @@ export default function App() {
           if (data.state === "lost") {
             sessionStorage.removeItem("cognitor_session_id");
             setGameState("lost");
+            setOracleMood("defeated");
             fetchStats();
           } else if (data.question) {
             setCurrentQuestion(data.question);
@@ -368,10 +402,10 @@ export default function App() {
 
       if (gameState === "in_progress") {
         if (e.key === "1" || e.key.toLowerCase() === "y") submitAnswer(1.0);
-        else if (e.key === "2" || e.key.toLowerCase() === "p") submitAnswer(0.75);
+        else if (e.key === "2" || e.key.toLowerCase() === "n") submitAnswer(0.0);
         else if (e.key === "3" || e.key.toLowerCase() === "d") submitAnswer(0.5);
-        else if (e.key === "4") submitAnswer(0.25);
-        else if (e.key === "5" || e.key.toLowerCase() === "n") submitAnswer(0.0);
+        else if (e.key === "4" || e.key.toLowerCase() === "p") submitAnswer(0.75);
+        else if (e.key === "5") submitAnswer(0.25);
         else if (e.key === "Backspace" || e.key.toLowerCase() === "u") handleBack();
       } else if (gameState === "guess_pending") {
         if (e.key.toLowerCase() === "y" || e.key === "Enter") confirmGuess(true);
@@ -418,34 +452,61 @@ export default function App() {
     : null;
 
   return (
-    <div className="container">
-      <header className="app-header">
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            navigateToHome();
-          }}
-          className="brand-link"
-        >
-          Cognitor
-        </a>
-
-        {gameState !== "idle" && !isAdminRoute && (
-          <button
-            className="header-action"
-            onClick={() => {
-              setGameState("idle");
-              sessionStorage.removeItem("cognitor_session_id");
+    <div className="akinator-app">
+      {/* HEADER */}
+      <header className="akinator-nav">
+        <div className="nav-brand-group">
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigateToHome();
             }}
+            className="brand-logo-link"
           >
-            New Game
+            <span className="brand-logo-text">Cognitor</span>
+            <span className="brand-oracle-tag">Oracle</span>
+          </a>
+        </div>
+
+        <div className="nav-controls">
+          <button
+            className="sound-toggle-btn"
+            onClick={toggleSound}
+            title={soundEnabled ? "Mute audio" : "Enable audio"}
+            aria-label="Toggle sound"
+          >
+            {soundEnabled ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+              </svg>
+            )}
           </button>
-        )}
+
+          {gameState !== "idle" && !isAdminRoute && (
+            <button
+              className="nav-reset-btn"
+              onClick={() => {
+                setGameState("idle");
+                setOracleMood("idle");
+                sessionStorage.removeItem("cognitor_session_id");
+              }}
+            >
+              New Game
+            </button>
+          )}
+        </div>
       </header>
 
       {errorMsg && (
-        <div className="error-banner">
+        <div className="akinator-error-banner">
           <span>{errorMsg}</span>
           {lastAction && (
             <button className="btn btn-danger btn-sm" onClick={lastAction}>
@@ -456,160 +517,213 @@ export default function App() {
       )}
 
       {isAdminRoute ? (
-        <AdminPanel onBack={navigateToHome} />
+        <main className="akinator-main">
+          <AdminPanel onBack={navigateToHome} />
+        </main>
       ) : (
-        <>
-          {/* IDLE / START SCREEN */}
+        <main className="akinator-main">
+          {/* ============================================================ */}
+          {/* WELCOME / IDLE ARENA */}
+          {/* ============================================================ */}
           {gameState === "idle" && (
-            <div className="card">
-              <h1 className="card-title">Cognitor</h1>
-              <p className="card-subtitle">
-                Think of a person or an everyday object. Answer questions, and the engine will deduce who or what you are thinking of.
-              </p>
+            <div className="arena-welcome-card">
+              <div className="oracle-stage">
+                <OracleAvatar mood="idle" size={170} />
+              </div>
 
-              <div className="category-picker-grid">
+              <div className="welcome-speech-bubble">
+                <h1 className="bubble-hero-title">Think of a character or object.</h1>
+                <p className="bubble-hero-subtitle">
+                  I will read your mind by asking a few questions. Choose your domain to begin.
+                </p>
+              </div>
+
+              <div className="domain-selection-grid">
                 <button
-                  className="category-card"
+                  className={`domain-card ${currentDomain === "character" ? "domain-selected" : ""}`}
                   onClick={() => startGame("character")}
                   disabled={loading}
                 >
-                  <span className="category-card-badge">Living & Fictional</span>
-                  <span className="category-card-name">Characters & Figures</span>
-                  <span className="category-card-desc">
-                    Real people, historical personalities, athletes, artists, and fictional icons.
-                  </span>
+                  <div className="domain-card-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  </div>
+                  <div className="domain-card-content">
+                    <span className="domain-card-label">Living & Fictional</span>
+                    <span className="domain-card-title">Characters & Figures</span>
+                    <span className="domain-card-desc">
+                      Real celebrities, historical leaders, anime icons, superheroes, and authors.
+                    </span>
+                  </div>
                 </button>
 
                 <button
-                  className="category-card"
+                  className={`domain-card ${currentDomain === "object" ? "domain-selected" : ""}`}
                   onClick={() => startGame("object")}
                   disabled={loading}
                 >
-                  <span className="category-card-badge">Everyday Items</span>
-                  <span className="category-card-name">Objects & Items</span>
-                  <span className="category-card-desc">
-                    Tools, appliances, electronics, clothing, vehicles, and household items.
-                  </span>
+                  <div className="domain-card-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                  </div>
+                  <div className="domain-card-content">
+                    <span className="domain-card-label">Everyday World</span>
+                    <span className="domain-card-title">Objects & Items</span>
+                    <span className="domain-card-desc">
+                      Electronics, appliances, vehicles, musical instruments, tools, and household gear.
+                    </span>
+                  </div>
                 </button>
               </div>
-
-              {stats && (
-                <div className="stats-strip">
-                  <span>{stats.activeEntities} active entries</span>
-                  <span>{stats.activeQuestions} traits</span>
-                  <span>{stats.wins} deductions</span>
-                </div>
-              )}
             </div>
           )}
 
-          {/* ACTIVE QUESTION SCREEN */}
+          {/* ============================================================ */}
+          {/* ACTIVE QUESTION ARENA (AKINATOR-STYLE) */}
+          {/* ============================================================ */}
           {gameState === "in_progress" && currentQuestion && (
-            <div className="card">
-              <div className="question-header-row">
-                <div className="step-indicator">
-                  <span>Question {currentQuestion.step}</span>
-                  <div className="progress-track" title={`Question ${currentQuestion.step} of 25`}>
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%` }}
-                    />
+            <div className="arena-game-card">
+              {/* Progress & Confidence Header */}
+              <div className="arena-progress-bar-container">
+                <div className="arena-progress-meta">
+                  <span className="q-step-badge">Question {currentQuestion.step}</span>
+                  <div className="confidence-meter-group">
+                    <span className="confidence-label">Progress</span>
+                    <span className="confidence-val">{Math.round(certainty * 100)}%</span>
                   </div>
                 </div>
 
-                <div className="certainty-indicator" title={`AI deduction certainty: ${Math.round(certainty * 100)}%`}>
-                  <span className="certainty-label">Certainty {Math.round(certainty * 100)}%</span>
-                  <div className="certainty-track">
-                    <div
-                      className="certainty-fill"
-                      style={{ width: `${Math.min(100, Math.max(5, certainty * 100))}%` }}
-                    />
-                  </div>
+                <div className="akinator-gauge-track" title={`Certainty: ${Math.round(certainty * 100)}%`}>
+                  <div
+                    className="akinator-gauge-fill"
+                    style={{ width: `${Math.min(100, Math.max(8, certainty * 100))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Oracle & Speech Bubble Stage */}
+              <div className="dialogue-stage">
+                <div className="oracle-stage-wrapper">
+                  <OracleAvatar mood={oracleMood} certainty={certainty} size={150} />
                 </div>
 
-                <span className="domain-pill">
-                  {currentDomain === "object" ? "Objects" : "Characters"}
-                </span>
+                <div className="oracle-speech-bubble">
+                  <div className="bubble-pointer" />
+                  <p className="bubble-question-text">{currentQuestion.text}</p>
+                </div>
               </div>
 
-              <div className="question-prompt">{currentQuestion.text}</div>
+              {/* 5 Akinator Answers in Classic Ergonomic Order */}
+              <div className="answers-grid">
+                <button
+                  className="akinator-btn btn-yes"
+                  onClick={() => submitAnswer(1.0)}
+                  disabled={loading}
+                >
+                  <span className="btn-text">Yes</span>
+                  <kbd className="btn-kbd">1</kbd>
+                </button>
 
-              <div className="answer-list">
-                <button className="answer-btn" onClick={() => submitAnswer(1.0)} disabled={loading}>
-                  <span>Yes</span>
-                  <kbd className="kbd-badge">1</kbd>
+                <button
+                  className="akinator-btn btn-no"
+                  onClick={() => submitAnswer(0.0)}
+                  disabled={loading}
+                >
+                  <span className="btn-text">No</span>
+                  <kbd className="btn-kbd">2</kbd>
                 </button>
-                <button className="answer-btn" onClick={() => submitAnswer(0.75)} disabled={loading}>
-                  <span>Probably</span>
-                  <kbd className="kbd-badge">2</kbd>
+
+                <button
+                  className="akinator-btn btn-dontknow"
+                  onClick={() => submitAnswer(0.5)}
+                  disabled={loading}
+                >
+                  <span className="btn-text">Don't know</span>
+                  <kbd className="btn-kbd">3</kbd>
                 </button>
-                <button className="answer-btn" onClick={() => submitAnswer(0.5)} disabled={loading}>
-                  <span>Don't know</span>
-                  <kbd className="kbd-badge">3</kbd>
+
+                <button
+                  className="akinator-btn btn-probably"
+                  onClick={() => submitAnswer(0.75)}
+                  disabled={loading}
+                >
+                  <span className="btn-text">Probably</span>
+                  <kbd className="btn-kbd">4</kbd>
                 </button>
-                <button className="answer-btn" onClick={() => submitAnswer(0.25)} disabled={loading}>
-                  <span>Probably not</span>
-                  <kbd className="kbd-badge">4</kbd>
-                </button>
-                <button className="answer-btn" onClick={() => submitAnswer(0.0)} disabled={loading}>
-                  <span>No</span>
-                  <kbd className="kbd-badge">5</kbd>
+
+                <button
+                  className="akinator-btn btn-probnot"
+                  onClick={() => submitAnswer(0.25)}
+                  disabled={loading}
+                >
+                  <span className="btn-text">Probably not</span>
+                  <kbd className="btn-kbd">5</kbd>
                 </button>
               </div>
 
-              <div className="action-row">
-                <div className="action-left">
+              {/* Utility Sub-actions */}
+              <div className="arena-sub-actions">
+                <div className="sub-left">
                   <button
-                    className="btn btn-ghost"
+                    className="sub-btn"
                     onClick={handleBack}
                     disabled={loading || currentQuestion.step <= 1}
-                    title="Undo last answer (Backspace)"
+                    title="Undo previous answer (Backspace)"
                   >
-                    Undo
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 14 4 9 9 4"></polyline>
+                      <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+                    </svg>
+                    <span>Previous Question</span>
                   </button>
+
                   {history.length > 0 && (
                     <button
-                      className={`btn btn-ghost history-toggle-btn ${showHistory ? "active" : ""}`}
+                      className={`sub-btn ${showHistory ? "sub-btn-active" : ""}`}
                       onClick={() => setShowHistory(!showHistory)}
-                      title="View answer history"
+                      title="View question history"
                     >
-                      History ({history.length})
+                      <span>Question Log ({history.length})</span>
                     </button>
                   )}
                 </div>
 
                 <button
-                  className="btn btn-ghost"
+                  className="sub-btn"
                   onClick={() => startGame(currentDomain)}
                   disabled={loading}
-                  title="Restart game"
+                  title="Restart from Question 1"
                 >
                   Restart
                 </button>
               </div>
 
-              {/* COLLAPSIBLE ANSWER HISTORY DRAWER */}
+              {/* History Timeline Drawer */}
               {showHistory && history.length > 0 && (
-                <div className="history-drawer">
-                  <div className="history-drawer-header">
-                    <span className="history-drawer-title">Answer History</span>
-                    <span className="history-drawer-sub">Click a question to return to that step</span>
+                <div className="history-drawer-panel">
+                  <div className="history-drawer-head">
+                    <span className="history-drawer-title">Question History</span>
+                    <span className="history-drawer-hint">Select a question to rewind to that turn</span>
                   </div>
-                  <div className="history-list">
+                  <div className="history-rows-scroll">
                     {history.map((h) => (
-                      <div key={h.step} className="history-item">
-                        <span className="history-step">Q{h.step}</span>
-                        <span className="history-text">{h.questionText}</span>
-                        <span className={`history-badge ${answerBadgeClass(h.answerValue)}`}>
+                      <div key={h.step} className="history-row-item">
+                        <span className="h-step-pill">Q{h.step}</span>
+                        <span className="h-text">{h.questionText}</span>
+                        <span className={`h-badge ${answerBadgeClass(h.answerValue)}`}>
                           {answerLabel(h.answerValue)}
                         </span>
                         <button
-                          className="history-revert-btn"
+                          className="h-rewind-btn"
                           onClick={() => jumpToStep(h.step)}
                           disabled={loading}
                           title={`Return to question ${h.step}`}
                         >
-                          Jump
+                          Rewind
                         </button>
                       </div>
                     ))}
@@ -619,17 +733,23 @@ export default function App() {
             </div>
           )}
 
-          {/* GUESS CARD */}
+          {/* ============================================================ */}
+          {/* THE DEDUCTION CARD ("I THINK OF...") */}
+          {/* ============================================================ */}
           {gameState === "guess_pending" && guess && (
-            <div className="card guess-container">
-              <span className="guess-label">Deduction</span>
+            <div className="arena-deduction-card">
+              <div className="deduction-oracle-header">
+                <OracleAvatar mood="guessing" certainty={certainty} size={130} />
+                <span className="deduction-eyebrow">The Oracle Proclaims</span>
+                <h2 className="deduction-reveal-text">I think of...</h2>
+              </div>
 
-              <div className="guess-media">
+              <div className="deduction-portrait-wrapper">
                 {proxiedImageUrl && !imageFailed ? (
                   <img
                     src={proxiedImageUrl}
                     alt={guess.name}
-                    className="guess-image"
+                    className="deduction-portrait-image"
                     referrerPolicy="no-referrer"
                     onError={() => {
                       setImageFailed(true);
@@ -639,59 +759,66 @@ export default function App() {
                     }}
                   />
                 ) : (
-                  <div className="guess-image-fallback">
-                    <span className="guess-fallback-initial">
-                      {guess.name.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="deduction-portrait-monogram">
+                    <span>{guess.name.charAt(0).toUpperCase()}</span>
                   </div>
                 )}
               </div>
 
-              <h2 className="guess-title">{guess.name}</h2>
-              {guess.description && <p className="guess-summary">{guess.description}</p>}
+              <h3 className="deduction-entity-name">{guess.name}</h3>
+              {guess.description && (
+                <p className="deduction-entity-desc">{guess.description}</p>
+              )}
 
-              <p className="guess-question">
-                Is this what you were thinking of?
+              <p className="deduction-confirm-prompt">
+                Is this who or what you were thinking of?
               </p>
 
-              <div className="guess-button-group">
+              <div className="deduction-button-row">
                 <button
-                  className="btn btn-primary"
+                  className="akinator-confirm-btn confirm-yes"
                   onClick={() => confirmGuess(true)}
                   disabled={loading}
                 >
-                  Yes, that's it
+                  <span>Yes, that's it!</span>
+                  <kbd className="btn-kbd">Y</kbd>
                 </button>
                 <button
-                  className="btn btn-danger"
+                  className="akinator-confirm-btn confirm-no"
                   onClick={() => confirmGuess(false)}
                   disabled={loading}
                 >
-                  No, keep guessing
+                  <span>No, keep guessing</span>
+                  <kbd className="btn-kbd">N</kbd>
                 </button>
               </div>
             </div>
           )}
 
-          {/* WON SCREEN */}
+          {/* ============================================================ */}
+          {/* WON SCREEN (CONFIRMED DEDUCTION) */}
+          {/* ============================================================ */}
           {gameState === "won" && (
-            <div className="card result-container">
-              <span className="result-badge">Confirmed</span>
-              <h2 className="result-heading">Thought Deduced</h2>
-              <p className="result-desc">
-                Successfully deduced in {currentQuestion ? currentQuestion.step : "a few"} questions with {Math.round(certainty * 100)}% certainty.
+            <div className="arena-result-card">
+              <div className="result-avatar-box">
+                <OracleAvatar mood="confident" certainty={1.0} size={140} />
+              </div>
+
+              <span className="result-trophy-tag">Deduction Confirmed</span>
+              <h2 className="result-title">Mind Read Successfully</h2>
+              <p className="result-detail">
+                I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions with {Math.round(certainty * 100)}% certainty.
               </p>
 
-              {/* POST-GAME DEDUCTION PATH */}
               {history.length > 0 && (
-                <div className="deduction-path">
-                  <div className="deduction-path-title">Deduction Path</div>
-                  <div className="deduction-path-list">
+                <div className="deduction-trail-container">
+                  <div className="trail-title">Key Deduction Pathway</div>
+                  <div className="trail-list">
                     {history.map((h) => (
-                      <div key={h.step} className="deduction-path-row">
-                        <span className="deduction-step">#{h.step}</span>
-                        <span className="deduction-q">{h.questionText}</span>
-                        <span className={`history-badge ${answerBadgeClass(h.answerValue)}`}>
+                      <div key={h.step} className="trail-item">
+                        <span className="trail-step">#{h.step}</span>
+                        <span className="trail-q">{h.questionText}</span>
+                        <span className={`h-badge ${answerBadgeClass(h.answerValue)}`}>
                           {answerLabel(h.answerValue)}
                         </span>
                       </div>
@@ -700,78 +827,90 @@ export default function App() {
                 </div>
               )}
 
-              <div className="result-actions">
+              <div className="result-btn-group">
                 <button
-                  className="btn btn-primary"
+                  className="akinator-btn btn-yes"
+                  style={{ width: "auto", minWidth: 180 }}
                   onClick={() => startGame(currentDomain)}
                 >
                   Play Again
                 </button>
                 <button
-                  className="btn"
+                  className="akinator-btn btn-probably"
+                  style={{ width: "auto", minWidth: 180 }}
                   onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
                 >
-                  Switch Category
+                  Switch Domain
                 </button>
               </div>
             </div>
           )}
 
-          {/* LOST & LEARN FORM SCREEN */}
+          {/* ============================================================ */}
+          {/* LOST SCREEN (ORACLE STUMPED / DEFEATED) */}
+          {/* ============================================================ */}
           {gameState === "lost" && (
-            <div className="card result-container">
-              <span className="result-badge">Game Finished</span>
-              <h2 className="result-heading">You Won</h2>
-              <p className="result-desc">
-                The engine was unable to deduce your thought within question limits. Add it below to expand the knowledge base.
+            <div className="arena-result-card">
+              <div className="result-avatar-box">
+                <OracleAvatar mood="defeated" size={140} />
+              </div>
+
+              <span className="result-trophy-tag">Bravo</span>
+              <h2 className="result-title">You Defeated Me</h2>
+              <p className="result-detail">
+                I could not deduce who or what you were thinking of within question limits. Add it below so I can learn from my defeat.
               </p>
 
               {learnSubmitted ? (
-                <div style={{ padding: "1.5rem 0" }}>
-                  <p style={{ color: "var(--success)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
-                    Thank you. Your submission has been saved.
+                <div className="learn-success-card">
+                  <p className="learn-success-text">
+                    Thank you. Your entry has been recorded and will expand future deductions.
                   </p>
-                  <button className="btn btn-primary" onClick={() => startGame(currentDomain)}>
+                  <button
+                    className="akinator-btn btn-yes"
+                    style={{ width: "auto", margin: "1rem auto 0" }}
+                    onClick={() => startGame(currentDomain)}
+                  >
                     Play Again
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleLearnSubmit}>
-                  <div className="form-group">
-                    <label className="form-label">
+                <form onSubmit={handleLearnSubmit} className="learn-form-wrapper">
+                  <div className="akinator-form-group">
+                    <label className="akinator-form-label">
                       {currentDomain === "object" ? "What object were you thinking of?" : "Who were you thinking of?"}
                     </label>
                     <input
                       type="text"
-                      className="form-input"
-                      placeholder={currentDomain === "object" ? "e.g. Acoustic Guitar, Microwave" : "e.g. Alan Turing, Marie Curie"}
+                      className="akinator-input"
+                      placeholder={currentDomain === "object" ? "e.g. Telescope, Smart Watch" : "e.g. Marie Curie, Alan Turing"}
                       value={learnName}
                       onChange={(e) => setLearnName(e.target.value)}
                       required
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">
+                  <div className="akinator-form-group">
+                    <label className="akinator-form-label">
                       A question distinguishing them from{" "}
-                      <strong>{closestWrongEntity ? closestWrongEntity.name : "the closest guess"}</strong>:
+                      <strong>{closestWrongEntity ? closestWrongEntity.name : "my closest deduction"}</strong>:
                     </label>
                     <input
                       type="text"
-                      className="form-input"
-                      placeholder={currentDomain === "object" ? "e.g. Does it produce musical notes?" : "e.g. Did they discover radioactivity?"}
+                      className="akinator-input"
+                      placeholder={currentDomain === "object" ? "e.g. Is it used to observe stars?" : "e.g. Did they break the Enigma code?"}
                       value={learnQuestion}
                       onChange={(e) => setLearnQuestion(e.target.value)}
                       required
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">
+                  <div className="akinator-form-group">
+                    <label className="akinator-form-label">
                       Correct answer for your selection:
                     </label>
                     <select
-                      className="form-select"
+                      className="akinator-select"
                       value={learnAnswer}
                       onChange={(e) => setLearnAnswer(parseFloat(e.target.value))}
                     >
@@ -783,11 +922,11 @@ export default function App() {
                     </select>
                   </div>
 
-                  <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
-                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
-                      {loading ? "Submitting..." : "Submit Entry"}
+                  <div className="learn-btn-row">
+                    <button type="submit" className="akinator-btn btn-yes" style={{ flex: 1 }} disabled={loading}>
+                      {loading ? "Recording..." : "Teach the Oracle"}
                     </button>
-                    <button type="button" className="btn" onClick={() => startGame(currentDomain)}>
+                    <button type="button" className="sub-btn" onClick={() => startGame(currentDomain)}>
                       Skip
                     </button>
                   </div>
@@ -795,22 +934,27 @@ export default function App() {
               )}
             </div>
           )}
-        </>
+        </main>
       )}
 
-      <footer className="app-footer">
-        <span>Cognitor</span>
-        <span>·</span>
-        <a
-          href="/admin"
-          onClick={(e) => {
-            e.preventDefault();
-            navigateToAdmin();
-          }}
-          className="admin-footer-link"
-        >
-          Admin
-        </a>
+      {/* DISCREET FOOTER */}
+      <footer className="akinator-footer">
+        <div className="footer-links">
+          <span>Cognitor Oracle</span>
+          <span>·</span>
+          <span>Dual Domain Engine</span>
+          <span>·</span>
+          <a
+            href="/admin"
+            onClick={(e) => {
+              e.preventDefault();
+              navigateToAdmin();
+            }}
+            className="footer-admin-link"
+          >
+            Admin
+          </a>
+        </div>
       </footer>
     </div>
   );
