@@ -9,7 +9,7 @@
     "dev:client": "vite client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "build:client": "vite build client",
-    "build:server": "tsc -p server/tsconfig.json",
+    "build:server": "tsc --noEmit",
     "build": "npm run build:client && npm run build:server",
     "start": "tsx server/index.ts",
     "test": "vitest run",

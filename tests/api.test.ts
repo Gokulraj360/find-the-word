@@ -96,7 +96,7 @@ describe("Cognitor REST API Endpoints", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.activeEntities).toBe(95);
-    expect(data.activeQuestions).toBe(70);
+    expect(data.activeQuestions).toBe(140);
     expect(data.totalGames).toBeGreaterThanOrEqual(1);
   });
 

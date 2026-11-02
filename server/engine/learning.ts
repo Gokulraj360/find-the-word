@@ -1,6 +1,7 @@
 import { IStorage } from "../db/types.js";
 import { EngineMatrix } from "./matrix.js";
 import { AnswerHistoryEntry } from "./session.js";
+import { resolveWikipediaImage } from "../services/imageService.js";
 
 export class LearningService {
   private storage: IStorage;
@@ -133,11 +134,15 @@ export class LearningService {
     closestWrongEntityId?: number,
     domain: "character" | "object" = "character"
   ): Promise<{ submissionId: number; entityId: number }> {
-    // 1. Create a pending entity
+    // 1. Resolve image & description from Wikipedia
+    const wikiInfo = await resolveWikipediaImage(entityName.trim());
+    const description = wikiInfo.description || `Submitted by user in game session ${sessionId.slice(0, 8)}`;
+    const imageUrl = wikiInfo.imageUrl || null;
+
     const pendingEntity = await this.storage.createEntity({
       name: entityName.trim(),
-      description: `Submitted by user in game session ${sessionId.slice(0, 8)}`,
-      imageUrl: null,
+      description,
+      imageUrl,
       popularity: 5.0,
       category: domain,
       status: "pending"

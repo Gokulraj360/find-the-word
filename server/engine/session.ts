@@ -43,6 +43,24 @@ export class GameSessionManager {
     this.posterior = this.engine.createInitialPosterior(this.domain);
   }
 
+  public get currentCertainty(): number {
+    const top = this.engine.getTopCandidates(this.posterior, 2);
+    if (top.length === 0) return 0;
+    const p1 = top[0].probability;
+    const p2 = top.length > 1 ? top[1].probability : 0;
+    const score = p1 * 0.7 + Math.max(0, p1 - p2) * 0.3;
+    return Math.min(1.0, Math.max(0.02, score));
+  }
+
+  public getAnswerSummary() {
+    return this.history.map((h, i) => ({
+      step: i + 1,
+      questionId: h.questionId,
+      questionText: this.matrix.questions[h.questionIdx]?.text || `Question ${i + 1}`,
+      answerValue: h.answerValue
+    }));
+  }
+
   public get stepCount(): number {
     return this.history.length;
   }
@@ -89,6 +107,15 @@ export class GameSessionManager {
     if (this.stepCount >= 25) {
       // Forced guess at question 25
       return true;
+    }
+
+    // Disambiguation barrier: after a rejected guess, require at least 2 questions before guessing again
+    const lastRejectedGuess = this.guesses[this.guesses.length - 1];
+    if (lastRejectedGuess && !lastRejectedGuess.accepted) {
+      const stepsSinceRejection = this.stepCount - lastRejectedGuess.step;
+      if (stepsSinceRejection < 2 && hasMoreQuestions) {
+        return false;
+      }
     }
 
     if (this.stepCount >= 8 && topCandidates.length > 0) {
@@ -297,6 +324,13 @@ export class GameSessionManager {
         if (top.length > 0 && top[0].probability < 0.05) {
           this.contradictionWeakening = true;
         }
+      }
+    }
+
+    // Re-apply penalties for all rejected guesses that occurred up to the current step
+    for (const g of this.guesses) {
+      if (!g.accepted && g.step <= this.stepCount) {
+        this.posterior = this.engine.penalizeRejectedGuess(this.posterior, g.entityIdx);
       }
     }
 

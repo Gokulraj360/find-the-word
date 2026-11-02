@@ -7,6 +7,7 @@ import { EngineMatrix } from "../engine/matrix.js";
 import { BayesianEngine } from "../engine/bayes.js";
 import { GameSessionManager } from "../engine/session.js";
 import { LearningService } from "../engine/learning.js";
+import { handleImageProxy, resolveWikipediaImage } from "../services/imageService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "cognitor-secret-jwt-key";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "adminpassword123";
@@ -138,6 +139,29 @@ export function createApiRouter(
   }
 
   // ---------------------------------------------------------------------------
+  // PUBLIC IMAGE & MEDIA PROXY ROUTES
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /api/image-proxy?url=...
+   * Proxies upstream images to prevent 403 hotlink blocks and CORS errors.
+   */
+  router.get("/image-proxy", handleImageProxy);
+
+  /**
+   * GET /api/entity-image?name=...
+   * Resolves entity thumbnail and description from Wikipedia dynamically.
+   */
+  router.get("/entity-image", async (req: Request, res: Response) => {
+    const name = req.query.name as string;
+    if (!name) {
+      return res.status(400).json({ error: "Query parameter 'name' is required." });
+    }
+    const info = await resolveWikipediaImage(name);
+    res.json(info);
+  });
+
+  // ---------------------------------------------------------------------------
   // PUBLIC GAME ROUTES
   // ---------------------------------------------------------------------------
 
@@ -163,7 +187,9 @@ export function createApiRouter(
         domain: sessionManager.domain,
         state: sessionManager.state,
         question: curQ,
-        guess: sessionManager.pendingGuess
+        guess: sessionManager.pendingGuess,
+        certainty: sessionManager.currentCertainty,
+        history: sessionManager.getAnswerSummary()
       });
     } catch (err: any) {
       res.status(404).json({ error: err.message });
@@ -194,7 +220,9 @@ export function createApiRouter(
       res.json({
         sessionId,
         domain,
-        question: startResult.question
+        question: startResult.question,
+        certainty: sessionManager.currentCertainty,
+        history: sessionManager.getAnswerSummary()
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -226,7 +254,9 @@ export function createApiRouter(
       res.json({
         state: outcome.state,
         question: outcome.question,
-        guess: outcome.guess
+        guess: outcome.guess,
+        certainty: sessionManager.currentCertainty,
+        history: sessionManager.getAnswerSummary()
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -249,7 +279,9 @@ export function createApiRouter(
 
       res.json({
         state: sessionManager.state,
-        question: outcome.question
+        question: outcome.question,
+        certainty: sessionManager.currentCertainty,
+        history: sessionManager.getAnswerSummary()
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -283,7 +315,9 @@ export function createApiRouter(
       res.json({
         state: outcome.state,
         question: outcome.question,
-        closestWrongEntity: outcome.closestWrongEntity
+        closestWrongEntity: outcome.closestWrongEntity,
+        certainty: sessionManager.currentCertainty,
+        history: sessionManager.getAnswerSummary()
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message });

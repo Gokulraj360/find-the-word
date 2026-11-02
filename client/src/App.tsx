@@ -15,6 +15,13 @@ interface CandidateGuess {
   probability: number;
 }
 
+interface HistoryItem {
+  step: number;
+  questionId: number;
+  questionText: string;
+  answerValue: number;
+}
+
 interface Stats {
   totalGames: number;
   wins: number;
@@ -22,6 +29,22 @@ interface Stats {
   activeEntities: number;
   activeQuestions: number;
   pendingSubmissions: number;
+}
+
+function answerLabel(val: number): string {
+  if (val >= 0.95) return "Yes";
+  if (val >= 0.7) return "Probably";
+  if (val >= 0.4) return "Don't know";
+  if (val >= 0.2) return "Probably not";
+  return "No";
+}
+
+function answerBadgeClass(val: number): string {
+  if (val >= 0.95) return "badge-ans-yes";
+  if (val >= 0.7) return "badge-ans-prob";
+  if (val >= 0.4) return "badge-ans-dk";
+  if (val >= 0.2) return "badge-ans-probnot";
+  return "badge-ans-no";
 }
 
 export default function App() {
@@ -33,6 +56,8 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentDomain, setCurrentDomain] = useState<"character" | "object">("character");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [certainty, setCertainty] = useState<number>(0.05);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [guess, setGuess] = useState<CandidateGuess | null>(null);
   const [closestWrongEntity, setClosestWrongEntity] = useState<CandidateGuess | null>(null);
   const [gameState, setGameState] = useState<"idle" | "in_progress" | "guess_pending" | "won" | "lost">("idle");
@@ -40,6 +65,8 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState("");
   const [lastAction, setLastAction] = useState<(() => void) | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
+  const [fallbackImage, setFallbackImage] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Learn form state
   const [learnName, setLearnName] = useState("");
@@ -60,6 +87,22 @@ export default function App() {
     }
   };
 
+  // Dynamically resolve Wikipedia image for an entity if primary image fails
+  const resolveEntityImage = async (name: string) => {
+    try {
+      const res = await fetch(`/api/entity-image?name=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.imageUrl) {
+          setFallbackImage(data.imageUrl);
+          setImageFailed(false);
+        }
+      }
+    } catch {
+      // fallback to monogram
+    }
+  };
+
   // Restore session from sessionStorage if page was refreshed
   const tryRestoreSession = async () => {
     const savedId = sessionStorage.getItem("cognitor_session_id");
@@ -73,6 +116,9 @@ export default function App() {
       }
       const data = await res.json();
       if (data.domain) setCurrentDomain(data.domain);
+      if (data.certainty !== undefined) setCertainty(data.certainty);
+      if (data.history) setHistory(data.history);
+
       if (data.state === "in_progress" && data.question) {
         setSessionId(data.sessionId);
         setCurrentQuestion(data.question);
@@ -119,6 +165,8 @@ export default function App() {
     setLearnQuestion("");
     setClosestWrongEntity(null);
     setImageFailed(false);
+    setFallbackImage(null);
+    setShowHistory(false);
     setCurrentDomain(domain);
     sessionStorage.removeItem("cognitor_session_id");
 
@@ -133,6 +181,8 @@ export default function App() {
       setSessionId(data.sessionId);
       sessionStorage.setItem("cognitor_session_id", data.sessionId);
       setCurrentQuestion(data.question);
+      if (data.certainty !== undefined) setCertainty(data.certainty);
+      if (data.history) setHistory(data.history);
       setGuess(null);
       setGameState("in_progress");
     } catch (err: any) {
@@ -160,10 +210,17 @@ export default function App() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to process answer");
 
+        if (data.certainty !== undefined) setCertainty(data.certainty);
+        if (data.history) setHistory(data.history);
+
         if (data.state === "guess_pending" && data.guess) {
           setGuess(data.guess);
           setImageFailed(false);
+          setFallbackImage(null);
           setGameState("guess_pending");
+          if (!data.guess.imageUrl) {
+            resolveEntityImage(data.guess.name);
+          }
         } else if (data.state === "in_progress" && data.question) {
           setCurrentQuestion(data.question);
           setGameState("in_progress");
@@ -198,8 +255,11 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || "Failed to undo");
 
       setCurrentQuestion(data.question);
+      if (data.certainty !== undefined) setCertainty(data.certainty);
+      if (data.history) setHistory(data.history);
       setGuess(null);
       setImageFailed(false);
+      setFallbackImage(null);
       setGameState("in_progress");
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -208,6 +268,38 @@ export default function App() {
       setLoading(false);
     }
   }, [sessionId, loading, currentQuestion]);
+
+  // Jump to specific step by rewinding
+  const jumpToStep = async (targetStep: number) => {
+    if (!sessionId || loading || !currentQuestion || targetStep >= currentQuestion.step) return;
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      let currentStep = currentQuestion.step;
+      let lastData: any = null;
+      while (currentStep > targetStep) {
+        const res = await fetch("/api/game/back", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId })
+        });
+        lastData = await res.json();
+        if (!res.ok) break;
+        currentStep = lastData.question?.step ?? targetStep;
+      }
+      if (lastData && lastData.question) {
+        setCurrentQuestion(lastData.question);
+        if (lastData.certainty !== undefined) setCertainty(lastData.certainty);
+        if (lastData.history) setHistory(lastData.history);
+        setGuess(null);
+        setGameState("in_progress");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Confirm guess
   const confirmGuess = useCallback(
@@ -230,6 +322,9 @@ export default function App() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to confirm guess");
 
+        if (data.certainty !== undefined) setCertainty(data.certainty);
+        if (data.history) setHistory(data.history);
+
         if (correct || data.state === "won") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("won");
@@ -250,6 +345,7 @@ export default function App() {
             setCurrentQuestion(data.question);
             setGuess(null);
             setImageFailed(false);
+            setFallbackImage(null);
             setGameState("in_progress");
           }
         }
@@ -315,6 +411,12 @@ export default function App() {
     }
   };
 
+  // Resolve best image URL for deduction
+  const activeImageUrl = fallbackImage || guess?.imageUrl || null;
+  const proxiedImageUrl = activeImageUrl
+    ? `/api/image-proxy?url=${encodeURIComponent(activeImageUrl)}`
+    : null;
+
   return (
     <div className="container">
       <header className="app-header">
@@ -343,10 +445,10 @@ export default function App() {
       </header>
 
       {errorMsg && (
-        <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", padding: "0.75rem 1rem", borderRadius: 8, marginBottom: "1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="error-banner">
           <span>{errorMsg}</span>
           {lastAction && (
-            <button className="btn btn-danger" style={{ padding: "0.25rem 0.6rem", fontSize: "0.8rem" }} onClick={lastAction}>
+            <button className="btn btn-danger btn-sm" onClick={lastAction}>
               Retry
             </button>
           )}
@@ -374,7 +476,7 @@ export default function App() {
                   <span className="category-card-badge">Living & Fictional</span>
                   <span className="category-card-name">Characters & Figures</span>
                   <span className="category-card-desc">
-                    Real people, celebrities, historical figures, and fictional characters.
+                    Real people, historical personalities, athletes, artists, and fictional icons.
                   </span>
                 </button>
 
@@ -386,7 +488,7 @@ export default function App() {
                   <span className="category-card-badge">Everyday Items</span>
                   <span className="category-card-name">Objects & Items</span>
                   <span className="category-card-desc">
-                    Tools, appliances, electronic gadgets, vehicles, and household items.
+                    Tools, appliances, electronics, clothing, vehicles, and household items.
                   </span>
                 </button>
               </div>
@@ -407,10 +509,20 @@ export default function App() {
               <div className="question-header-row">
                 <div className="step-indicator">
                   <span>Question {currentQuestion.step}</span>
-                  <div className="progress-track">
+                  <div className="progress-track" title={`Question ${currentQuestion.step} of 25`}>
                     <div
                       className="progress-fill"
                       style={{ width: `${Math.min(100, (currentQuestion.step / 25) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="certainty-indicator" title={`AI deduction certainty: ${Math.round(certainty * 100)}%`}>
+                  <span className="certainty-label">Certainty {Math.round(certainty * 100)}%</span>
+                  <div className="certainty-track">
+                    <div
+                      className="certainty-fill"
+                      style={{ width: `${Math.min(100, Math.max(5, certainty * 100))}%` }}
                     />
                   </div>
                 </div>
@@ -446,14 +558,26 @@ export default function App() {
               </div>
 
               <div className="action-row">
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleBack}
-                  disabled={loading || currentQuestion.step <= 1}
-                  title="Undo last answer (Backspace)"
-                >
-                  Undo
-                </button>
+                <div className="action-left">
+                  <button
+                    className="btn btn-ghost"
+                    onClick={handleBack}
+                    disabled={loading || currentQuestion.step <= 1}
+                    title="Undo last answer (Backspace)"
+                  >
+                    Undo
+                  </button>
+                  {history.length > 0 && (
+                    <button
+                      className={`btn btn-ghost history-toggle-btn ${showHistory ? "active" : ""}`}
+                      onClick={() => setShowHistory(!showHistory)}
+                      title="View answer history"
+                    >
+                      History ({history.length})
+                    </button>
+                  )}
+                </div>
+
                 <button
                   className="btn btn-ghost"
                   onClick={() => startGame(currentDomain)}
@@ -463,6 +587,35 @@ export default function App() {
                   Restart
                 </button>
               </div>
+
+              {/* COLLAPSIBLE ANSWER HISTORY DRAWER */}
+              {showHistory && history.length > 0 && (
+                <div className="history-drawer">
+                  <div className="history-drawer-header">
+                    <span className="history-drawer-title">Answer History</span>
+                    <span className="history-drawer-sub">Click a question to return to that step</span>
+                  </div>
+                  <div className="history-list">
+                    {history.map((h) => (
+                      <div key={h.step} className="history-item">
+                        <span className="history-step">Q{h.step}</span>
+                        <span className="history-text">{h.questionText}</span>
+                        <span className={`history-badge ${answerBadgeClass(h.answerValue)}`}>
+                          {answerLabel(h.answerValue)}
+                        </span>
+                        <button
+                          className="history-revert-btn"
+                          onClick={() => jumpToStep(h.step)}
+                          disabled={loading}
+                          title={`Return to question ${h.step}`}
+                        >
+                          Jump
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -472,13 +625,18 @@ export default function App() {
               <span className="guess-label">Deduction</span>
 
               <div className="guess-media">
-                {guess.imageUrl && !imageFailed ? (
+                {proxiedImageUrl && !imageFailed ? (
                   <img
-                    src={guess.imageUrl}
+                    src={proxiedImageUrl}
                     alt={guess.name}
                     className="guess-image"
                     referrerPolicy="no-referrer"
-                    onError={() => setImageFailed(true)}
+                    onError={() => {
+                      setImageFailed(true);
+                      if (!fallbackImage) {
+                        resolveEntityImage(guess.name);
+                      }
+                    }}
                   />
                 ) : (
                   <div className="guess-image-fallback">
@@ -521,8 +679,27 @@ export default function App() {
               <span className="result-badge">Confirmed</span>
               <h2 className="result-heading">Thought Deduced</h2>
               <p className="result-desc">
-                Successfully deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions.
+                Successfully deduced in {currentQuestion ? currentQuestion.step : "a few"} questions with {Math.round(certainty * 100)}% certainty.
               </p>
+
+              {/* POST-GAME DEDUCTION PATH */}
+              {history.length > 0 && (
+                <div className="deduction-path">
+                  <div className="deduction-path-title">Deduction Path</div>
+                  <div className="deduction-path-list">
+                    {history.map((h) => (
+                      <div key={h.step} className="deduction-path-row">
+                        <span className="deduction-step">#{h.step}</span>
+                        <span className="deduction-q">{h.questionText}</span>
+                        <span className={`history-badge ${answerBadgeClass(h.answerValue)}`}>
+                          {answerLabel(h.answerValue)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="result-actions">
                 <button
                   className="btn btn-primary"
@@ -552,7 +729,7 @@ export default function App() {
               {learnSubmitted ? (
                 <div style={{ padding: "1.5rem 0" }}>
                   <p style={{ color: "var(--success)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
-                    Thank you. Your submission has been sent for moderation.
+                    Thank you. Your submission has been saved.
                   </p>
                   <button className="btn btn-primary" onClick={() => startGame(currentDomain)}>
                     Play Again

@@ -408,8 +408,11 @@ export class BayesianEngine {
     // Sort by score descending
     candidateQuestions.sort((a, b) => b.score - a.score);
 
-    // Pick randomly from the top 3 (or fewer if less than 3) so games vary
-    const topChoices = candidateQuestions.slice(0, Math.min(3, candidateQuestions.length));
+    // Pick randomly from top candidates within 15% of the best score
+    // This guarantees variety while strictly preventing picking inferior splitters
+    const bestScore = candidateQuestions[0].score;
+    const scoreThreshold = bestScore * 0.85;
+    const topChoices = candidateQuestions.filter((q) => q.score >= scoreThreshold).slice(0, 3);
     const chosen = topChoices[Math.floor(Math.random() * topChoices.length)];
 
     return chosen;

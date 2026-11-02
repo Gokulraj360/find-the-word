@@ -38,7 +38,7 @@ describe("Simulation CI Gate", () => {
 
         const trueVal = (SEED_GROUND_TRUTH[target.id] || {})[curQ.id] ?? 0.5;
         const noisy = Math.random() < noiseRate;
-        let ans = ANSWER_VALUES.UNKNOWN;
+        let ans: number = ANSWER_VALUES.UNKNOWN;
 
         if (noisy) {
           ans = trueVal >= 0.5 ? ANSWER_VALUES.NO : ANSWER_VALUES.YES;

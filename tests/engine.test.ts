@@ -20,9 +20,9 @@ describe("Cognitor Bayesian Engine", () => {
   describe("In-Memory Matrix & Prior Initialization", () => {
     it("should load active entities, questions, and non-empty Float32Arrays", () => {
       expect(matrix.numEntities).toBe(95);
-      expect(matrix.numQuestions).toBe(70);
-      expect(matrix.pYes.length).toBe(95 * 70);
-      expect(matrix.confidence.length).toBe(95 * 70);
+      expect(matrix.numQuestions).toBe(140);
+      expect(matrix.pYes.length).toBe(95 * 140);
+      expect(matrix.confidence.length).toBe(95 * 140);
       expect(matrix.priors.length).toBe(95);
       expect(matrix.characterEntityIndices.length).toBe(50);
       expect(matrix.objectEntityIndices.length).toBe(45);
