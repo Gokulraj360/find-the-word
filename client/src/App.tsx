@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { AdminPanel } from "./Admin.js";
-import { OracleAvatar, OracleMood } from "./OracleAvatar.js";
 import { sounds } from "./soundEffects.js";
 
 interface Question {
@@ -63,7 +62,6 @@ export default function App() {
   const [guess, setGuess] = useState<CandidateGuess | null>(null);
   const [closestWrongEntity, setClosestWrongEntity] = useState<CandidateGuess | null>(null);
   const [gameState, setGameState] = useState<"idle" | "in_progress" | "guess_pending" | "won" | "lost">("idle");
-  const [oracleMood, setOracleMood] = useState<OracleMood>("idle");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [lastAction, setLastAction] = useState<(() => void) | null>(null);
@@ -127,12 +125,10 @@ export default function App() {
         setSessionId(data.sessionId);
         setCurrentQuestion(data.question);
         setGameState("in_progress");
-        setOracleMood(data.certainty >= 0.65 ? "confident" : "idle");
       } else if (data.state === "guess_pending" && data.guess) {
         setSessionId(data.sessionId);
         setGuess(data.guess);
         setGameState("guess_pending");
-        setOracleMood("guessing");
       }
     } catch {
       sessionStorage.removeItem("cognitor_session_id");
@@ -179,7 +175,6 @@ export default function App() {
     setFallbackImage(null);
     setShowHistory(false);
     setCurrentDomain(domain);
-    setOracleMood("thinking");
     sessionStorage.removeItem("cognitor_session_id");
 
     try {
@@ -197,10 +192,8 @@ export default function App() {
       if (data.history) setHistory(data.history);
       setGuess(null);
       setGameState("in_progress");
-      setOracleMood("idle");
     } catch (err: any) {
       setErrorMsg(err.message);
-      setOracleMood("idle");
       setLastAction(() => () => startGame(domain));
     } finally {
       setLoading(false);
@@ -217,9 +210,6 @@ export default function App() {
 
       // Play audio chime
       sounds.playAnswerChime(answerVal);
-
-      // Momentary thinking expression
-      setOracleMood("thinking");
 
       try {
         const res = await fetch("/api/game/answer", {
@@ -238,7 +228,6 @@ export default function App() {
           setImageFailed(false);
           setFallbackImage(null);
           setGameState("guess_pending");
-          setOracleMood("guessing");
           sounds.playDeductionReveal();
 
           if (!data.guess.imageUrl) {
@@ -247,23 +236,18 @@ export default function App() {
         } else if (data.state === "in_progress" && data.question) {
           setCurrentQuestion(data.question);
           setGameState("in_progress");
-          // Update mood based on certainty
-          const nextCert = data.certainty ?? certainty;
-          setOracleMood(nextCert >= 0.65 ? "confident" : "idle");
         } else if (data.state === "lost") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("lost");
-          setOracleMood("defeated");
         }
       } catch (err: any) {
         setErrorMsg(err.message);
-        setOracleMood("idle");
         setLastAction(() => () => submitAnswer(answerVal));
       } finally {
         setLoading(false);
       }
     },
-    [sessionId, loading, certainty]
+    [sessionId, loading]
   );
 
   // Back / Undo
@@ -289,7 +273,6 @@ export default function App() {
       setImageFailed(false);
       setFallbackImage(null);
       setGameState("in_progress");
-      setOracleMood(data.certainty >= 0.65 ? "confident" : "idle");
     } catch (err: any) {
       setErrorMsg(err.message);
       setLastAction(() => handleBack);
@@ -322,7 +305,6 @@ export default function App() {
         if (lastData.history) setHistory(lastData.history);
         setGuess(null);
         setGameState("in_progress");
-        setOracleMood(lastData.certainty >= 0.65 ? "confident" : "idle");
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -358,12 +340,9 @@ export default function App() {
         if (correct || data.state === "won") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("won");
-          setOracleMood("confident");
           sounds.playVictory();
           fetchStats();
         } else {
-          // Rejected guess: Oracle is stumped and continues
-          setOracleMood("stumped");
           if (data.closestWrongEntity) {
             setClosestWrongEntity(data.closestWrongEntity);
           } else {
@@ -373,7 +352,6 @@ export default function App() {
           if (data.state === "lost") {
             sessionStorage.removeItem("cognitor_session_id");
             setGameState("lost");
-            setOracleMood("defeated");
             fetchStats();
           } else if (data.question) {
             setCurrentQuestion(data.question);
@@ -465,7 +443,6 @@ export default function App() {
             className="brand-logo-link"
           >
             <span className="brand-logo-text">Cognitor</span>
-            <span className="brand-oracle-tag">Oracle</span>
           </a>
         </div>
 
@@ -495,7 +472,6 @@ export default function App() {
               className="nav-reset-btn"
               onClick={() => {
                 setGameState("idle");
-                setOracleMood("idle");
                 sessionStorage.removeItem("cognitor_session_id");
               }}
             >
@@ -527,14 +503,10 @@ export default function App() {
           {/* ============================================================ */}
           {gameState === "idle" && (
             <div className="arena-welcome-card">
-              <div className="oracle-stage">
-                <OracleAvatar mood="idle" size={170} />
-              </div>
-
               <div className="welcome-speech-bubble">
-                <h1 className="bubble-hero-title">Think of a character or object.</h1>
+                <h1 className="bubble-hero-title">Think of a character or object</h1>
                 <p className="bubble-hero-subtitle">
-                  I will read your mind by asking a few questions. Choose your domain to begin.
+                  I will deduce who or what you are thinking of through a series of questions. Choose your domain to begin.
                 </p>
               </div>
 
@@ -551,8 +523,8 @@ export default function App() {
                     </svg>
                   </div>
                   <div className="domain-card-content">
-                    <span className="domain-card-label">Living & Fictional</span>
-                    <span className="domain-card-title">Characters & Figures</span>
+                    <span className="domain-card-label">Living and Fictional</span>
+                    <span className="domain-card-title">Characters and Figures</span>
                     <span className="domain-card-desc">
                       Real celebrities, historical leaders, anime icons, superheroes, and authors.
                     </span>
@@ -572,7 +544,7 @@ export default function App() {
                   </div>
                   <div className="domain-card-content">
                     <span className="domain-card-label">Everyday World</span>
-                    <span className="domain-card-title">Objects & Items</span>
+                    <span className="domain-card-title">Objects and Items</span>
                     <span className="domain-card-desc">
                       Electronics, appliances, vehicles, musical instruments, tools, and household gear.
                     </span>
@@ -587,32 +559,14 @@ export default function App() {
           {/* ============================================================ */}
           {gameState === "in_progress" && currentQuestion && (
             <div className="arena-game-card">
-              {/* Progress & Confidence Header */}
-              <div className="arena-progress-bar-container">
-                <div className="arena-progress-meta">
-                  <span className="q-step-badge">Question {currentQuestion.step}</span>
-                  <div className="confidence-meter-group">
-                    <span className="confidence-label">Progress</span>
-                    <span className="confidence-val">{Math.round(certainty * 100)}%</span>
-                  </div>
-                </div>
-
-                <div className="akinator-gauge-track" title={`Certainty: ${Math.round(certainty * 100)}%`}>
-                  <div
-                    className="akinator-gauge-fill"
-                    style={{ width: `${Math.min(100, Math.max(8, certainty * 100))}%` }}
-                  />
-                </div>
+              {/* Turn Indicator */}
+              <div className="arena-step-header">
+                <span className="q-step-badge">Question {currentQuestion.step}</span>
               </div>
 
-              {/* Oracle & Speech Bubble Stage */}
+              {/* Speech Bubble Stage */}
               <div className="dialogue-stage">
-                <div className="oracle-stage-wrapper">
-                  <OracleAvatar mood={oracleMood} certainty={certainty} size={150} />
-                </div>
-
-                <div className="oracle-speech-bubble">
-                  <div className="bubble-pointer" />
+                <div className="question-speech-bubble">
                   <p className="bubble-question-text">{currentQuestion.text}</p>
                 </div>
               </div>
@@ -738,9 +692,8 @@ export default function App() {
           {/* ============================================================ */}
           {gameState === "guess_pending" && guess && (
             <div className="arena-deduction-card">
-              <div className="deduction-oracle-header">
-                <OracleAvatar mood="guessing" certainty={certainty} size={130} />
-                <span className="deduction-eyebrow">The Oracle Proclaims</span>
+              <div className="deduction-header">
+                <span className="deduction-eyebrow">My Deduction</span>
                 <h2 className="deduction-reveal-text">I think of...</h2>
               </div>
 
@@ -781,15 +734,13 @@ export default function App() {
                   disabled={loading}
                 >
                   <span>Yes, that's it!</span>
-                  <kbd className="btn-kbd">Y</kbd>
                 </button>
                 <button
                   className="akinator-confirm-btn confirm-no"
                   onClick={() => confirmGuess(false)}
                   disabled={loading}
                 >
-                  <span>No, keep guessing</span>
-                  <kbd className="btn-kbd">N</kbd>
+                  <span>No</span>
                 </button>
               </div>
             </div>
@@ -799,19 +750,54 @@ export default function App() {
           {/* WON SCREEN (CONFIRMED DEDUCTION) */}
           {/* ============================================================ */}
           {gameState === "won" && (
-            <div className="arena-result-card">
-              <div className="result-avatar-box">
-                <OracleAvatar mood="confident" certainty={1.0} size={140} />
+            <div className="arena-result-grid">
+              <div className="arena-result-summary-card">
+                <span className="result-trophy-tag">Deduction Confirmed</span>
+                <h2 className="result-title">Mind Read Successfully</h2>
+                <p className="result-detail">
+                  I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions.
+                </p>
+
+                {guess && (
+                  <div className="result-entity-preview">
+                    {proxiedImageUrl && !imageFailed ? (
+                      <img
+                        src={proxiedImageUrl}
+                        alt={guess.name}
+                        className="result-preview-image"
+                      />
+                    ) : (
+                      <div className="result-preview-monogram">
+                        <span>{guess.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
+                    <div className="result-preview-meta">
+                      <span className="result-preview-name">{guess.name}</span>
+                      {guess.description && (
+                        <span className="result-preview-desc">{guess.description}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="result-btn-group">
+                  <button
+                    className="akinator-btn btn-yes"
+                    onClick={() => startGame(currentDomain)}
+                  >
+                    Play Again
+                  </button>
+                  <button
+                    className="akinator-btn btn-probably"
+                    onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
+                  >
+                    Switch to {currentDomain === "object" ? "Characters" : "Objects"}
+                  </button>
+                </div>
               </div>
 
-              <span className="result-trophy-tag">Deduction Confirmed</span>
-              <h2 className="result-title">Mind Read Successfully</h2>
-              <p className="result-detail">
-                I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions with {Math.round(certainty * 100)}% certainty.
-              </p>
-
               {history.length > 0 && (
-                <div className="deduction-trail-container">
+                <div className="arena-result-pathway-card">
                   <div className="trail-title">Key Deduction Pathway</div>
                   <div className="trail-list">
                     {history.map((h) => (
@@ -826,39 +812,18 @@ export default function App() {
                   </div>
                 </div>
               )}
-
-              <div className="result-btn-group">
-                <button
-                  className="akinator-btn btn-yes"
-                  style={{ width: "auto", minWidth: 180 }}
-                  onClick={() => startGame(currentDomain)}
-                >
-                  Play Again
-                </button>
-                <button
-                  className="akinator-btn btn-probably"
-                  style={{ width: "auto", minWidth: 180 }}
-                  onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
-                >
-                  Switch Domain
-                </button>
-              </div>
             </div>
           )}
 
           {/* ============================================================ */}
-          {/* LOST SCREEN (ORACLE STUMPED / DEFEATED) */}
+          {/* LOST SCREEN (STUMPED / DEFEATED) */}
           {/* ============================================================ */}
           {gameState === "lost" && (
             <div className="arena-result-card">
-              <div className="result-avatar-box">
-                <OracleAvatar mood="defeated" size={140} />
-              </div>
-
-              <span className="result-trophy-tag">Bravo</span>
+              <span className="result-trophy-tag">Well Played</span>
               <h2 className="result-title">You Defeated Me</h2>
               <p className="result-detail">
-                I could not deduce who or what you were thinking of within question limits. Add it below so I can learn from my defeat.
+                I could not deduce who or what you were thinking of within the question limits. Teach Cognitor what you were thinking of to sharpen future games.
               </p>
 
               {learnSubmitted ? (
@@ -924,7 +889,7 @@ export default function App() {
 
                   <div className="learn-btn-row">
                     <button type="submit" className="akinator-btn btn-yes" style={{ flex: 1 }} disabled={loading}>
-                      {loading ? "Recording..." : "Teach the Oracle"}
+                      {loading ? "Recording..." : "Submit Entity"}
                     </button>
                     <button type="button" className="sub-btn" onClick={() => startGame(currentDomain)}>
                       Skip
@@ -937,12 +902,12 @@ export default function App() {
         </main>
       )}
 
-      {/* DISCREET FOOTER */}
+      {/* DISCREET MINIMAL FOOTER */}
       <footer className="akinator-footer">
         <div className="footer-links">
-          <span>Cognitor Oracle</span>
+          <span>Cognitor</span>
           <span>·</span>
-          <span>Dual Domain Engine</span>
+          <span>20 Questions Mind Guesser</span>
           <span>·</span>
           <a
             href="/admin"

@@ -2862,9 +2862,9 @@
     {
       "entityId": 3,
       "questionId": 13,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 3,
@@ -3128,8 +3128,8 @@
     {
       "entityId": 4,
       "questionId": 11,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -26249,8 +26249,8 @@
     {
       "entityId": 3,
       "questionId": 84,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -26494,8 +26494,8 @@
     {
       "entityId": 4,
       "questionId": 84,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -26508,9 +26508,9 @@
     {
       "entityId": 4,
       "questionId": 86,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 4,
@@ -29924,8 +29924,8 @@
     {
       "entityId": 18,
       "questionId": 84,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -30169,8 +30169,8 @@
     {
       "entityId": 19,
       "questionId": 84,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -32129,9 +32129,9 @@
     {
       "entityId": 27,
       "questionId": 84,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 27,
@@ -34089,8 +34089,8 @@
     {
       "entityId": 35,
       "questionId": 84,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -36294,9 +36294,9 @@
     {
       "entityId": 44,
       "questionId": 84,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 44,
@@ -36308,8 +36308,8 @@
     {
       "entityId": 44,
       "questionId": 86,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -37043,9 +37043,9 @@
     {
       "entityId": 47,
       "questionId": 86,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 47,
@@ -38100,9 +38100,9 @@
     {
       "entityId": 51,
       "questionId": 132,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 51,
@@ -38345,8 +38345,8 @@
     {
       "entityId": 52,
       "questionId": 132,
-      "yesW": 12,
-      "noW": 0,
+      "yesW": 0,
+      "noW": 12,
       "unknownW": 0
     },
     {
@@ -41530,9 +41530,9 @@
     {
       "entityId": 65,
       "questionId": 132,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 65,
@@ -46185,9 +46185,9 @@
     {
       "entityId": 84,
       "questionId": 132,
-      "yesW": 9,
-      "noW": 2,
-      "unknownW": 1
+      "yesW": 0,
+      "noW": 12,
+      "unknownW": 0
     },
     {
       "entityId": 84,

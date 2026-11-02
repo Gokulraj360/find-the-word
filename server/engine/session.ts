@@ -121,8 +121,24 @@ export class GameSessionManager {
     if (this.stepCount >= 8 && topCandidates.length > 0) {
       const top1 = topCandidates[0].probability;
       const top2 = topCandidates.length > 1 ? topCandidates[1].probability : 0;
-      if (top1 >= 0.80 && top1 - top2 >= 0.25) {
-        return true;
+
+      // Early turns (8 - 11): require overwhelming certainty to prevent premature wrong guesses
+      if (this.stepCount <= 11) {
+        if (top1 >= 0.92 && top1 - top2 >= 0.35) {
+          return true;
+        }
+      }
+      // Mid turns (12 - 16): require solid confidence
+      else if (this.stepCount <= 16) {
+        if (top1 >= 0.85 && top1 - top2 >= 0.25) {
+          return true;
+        }
+      }
+      // Late turns (17 - 24): standard threshold
+      else {
+        if (top1 >= 0.78 && top1 - top2 >= 0.20) {
+          return true;
+        }
       }
     }
 
