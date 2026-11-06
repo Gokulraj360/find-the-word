@@ -1,0 +1,203 @@
+[
+  {
+    "playerName": "LogicMaster",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Cricket Ball",
+    "domain": "object",
+    "difficulty": "expert",
+    "date": "2026-11-06T03:36:35.474Z",
+    "id": "a0495b44-6eb6-4b2e-a3f6-7dc2264325fc",
+    "createdAt": 1793936195474
+  },
+  {
+    "playerName": "Brainstormer",
+    "category": "fastest_guess",
+    "score": 6,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-05T20:36:35.474Z",
+    "id": "30b23bfb-c1e9-4d41-bc9d-cfc1a830c652",
+    "createdAt": 1793910995474
+  },
+  {
+    "playerName": "QuantumMind",
+    "category": "fastest_guess",
+    "score": 6,
+    "entityName": "Basketball",
+    "domain": "object",
+    "difficulty": "easy",
+    "date": "2026-11-05T08:36:35.474Z",
+    "id": "c9005454-01c9-4be9-8990-554839e93d08",
+    "createdAt": 1793867795474
+  },
+  {
+    "playerName": "EnigmaPro",
+    "category": "fastest_guess",
+    "score": 7,
+    "entityName": "Lionel Messi",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-04T20:36:35.475Z",
+    "id": "eed02e73-32f9-458b-ba2e-e2dbd9d6b531",
+    "createdAt": 1793824595475
+  },
+  {
+    "playerName": "CipherNine",
+    "category": "fastest_guess",
+    "score": 7,
+    "entityName": "Tennis Ball",
+    "domain": "object",
+    "difficulty": "easy",
+    "date": "2026-11-04T08:36:35.475Z",
+    "id": "f324487d-41ab-4ff9-9f26-dcdea27155ee",
+    "createdAt": 1793781395475
+  },
+  {
+    "playerName": "AkiChampion",
+    "category": "best_streak",
+    "score": 18,
+    "difficulty": "hard",
+    "date": "2026-11-06T02:36:35.475Z",
+    "id": "fc3d2ea1-62a2-4e2a-9c47-dc86128b5cc7",
+    "createdAt": 1793932595475
+  },
+  {
+    "playerName": "ShadowSolver",
+    "category": "best_streak",
+    "score": 14,
+    "difficulty": "expert",
+    "date": "2026-11-05T14:36:35.475Z",
+    "id": "c096f13f-ba48-464a-8eda-74b9bc5a87e5",
+    "createdAt": 1793889395475
+  },
+  {
+    "playerName": "MindReaderX",
+    "category": "best_streak",
+    "score": 11,
+    "difficulty": "easy",
+    "date": "2026-11-05T02:36:35.475Z",
+    "id": "9cd3cbd3-8cae-4804-a2e9-0e79c4ad49d2",
+    "createdAt": 1793846195475
+  },
+  {
+    "playerName": "OraclePrime",
+    "category": "best_streak",
+    "score": 9,
+    "difficulty": "hard",
+    "date": "2026-11-04T14:36:35.475Z",
+    "id": "792f58d4-cf4f-4a6a-94c2-f3813df9a8c6",
+    "createdAt": 1793802995475
+  },
+  {
+    "playerName": "MysticThinker",
+    "category": "stumped",
+    "score": 25,
+    "entityName": "Volleyball",
+    "domain": "object",
+    "difficulty": "expert",
+    "date": "2026-11-06T00:36:35.475Z",
+    "id": "738a2980-77ec-4921-95a7-84f17185d5b0",
+    "createdAt": 1793925395475
+  },
+  {
+    "playerName": "RiddleCrafter",
+    "category": "stumped",
+    "score": 25,
+    "entityName": "Wooden Pencil",
+    "domain": "object",
+    "difficulty": "hard",
+    "date": "2026-11-05T12:36:35.475Z",
+    "id": "8533b5c6-6d03-406b-bf9a-e076b2e79a6a",
+    "createdAt": 1793882195475
+  },
+  {
+    "playerName": "TheGhost",
+    "category": "stumped",
+    "score": 20,
+    "entityName": "Guitar Pick",
+    "domain": "object",
+    "difficulty": "hard",
+    "date": "2026-11-04T16:36:35.475Z",
+    "id": "592d0569-2c80-4690-8e19-7b2dbe6c21d8",
+    "createdAt": 1793810195475
+  },
+  {
+    "id": "ec0b3212-f75e-42e6-bbf6-24c17fda5f7d",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T08:37:30.879Z",
+    "createdAt": 1793954250879
+  },
+  {
+    "id": "0dbd727b-cbf0-44ef-8d8b-b42a7fee9b17",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T08:44:56.846Z",
+    "createdAt": 1793954696846
+  },
+  {
+    "id": "6b7b13dc-fed3-4ee8-b91d-04cd682c01f9",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T09:00:57.249Z",
+    "createdAt": 1793955657249
+  },
+  {
+    "id": "5ee6bd58-7354-4dd5-a612-8bc43fc79f6b",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T09:12:59.671Z",
+    "createdAt": 1793956379671
+  },
+  {
+    "id": "30923a3a-8252-459c-8c52-9e0255d52e2a",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T09:25:39.039Z",
+    "createdAt": 1793957139039
+  },
+  {
+    "id": "8bfc355e-2b34-48ba-a3a9-d2e14d183cf7",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T09:58:51.444Z",
+    "createdAt": 1793959131444
+  },
+  {
+    "id": "1ce242d4-b653-4d3a-91b0-09c400848b5d",
+    "playerName": "TestHero",
+    "category": "fastest_guess",
+    "score": 5,
+    "entityName": "Albert Einstein",
+    "domain": "character",
+    "difficulty": "hard",
+    "date": "2026-11-06T10:07:37.720Z",
+    "createdAt": 1793959657720
+  }
+]

@@ -5,6 +5,7 @@ export interface EntityRecord {
   imageUrl: string | null;
   popularity: number;
   category?: "character" | "object";
+  funFact?: string | null;
   status: "active" | "pending";
   createdAt: Date;
 }

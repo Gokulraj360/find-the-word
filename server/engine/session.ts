@@ -1,5 +1,6 @@
 import { EngineMatrix } from "./matrix.js";
 import { BayesianEngine, CandidateScore } from "./bayes.js";
+import { CategoryPackId } from "../services/categoryPackService.js";
 
 export interface AnswerHistoryEntry {
   questionId: number;
@@ -15,13 +16,17 @@ export interface GuessRecordEntry {
 }
 
 export type GameState = "in_progress" | "guess_pending" | "won" | "lost";
+export type Difficulty = "easy" | "hard" | "expert";
 
 export class GameSessionManager {
   public sessionId: string;
   public domain: "character" | "object";
+  public difficulty: Difficulty;
+  public categoryPack: CategoryPackId;
   public matrix: EngineMatrix;
   public engine: BayesianEngine;
 
+  public penalties: Float32Array;
   public posterior: Float32Array;
   public history: AnswerHistoryEntry[] = [];
   public askedQuestionIndices: Set<number> = new Set();
@@ -33,18 +38,42 @@ export class GameSessionManager {
 
   public contradictionWeakening = false;
   public maxGuesses = 3;
-  public hardQuestionLimit = 30;
+  public hardQuestionLimit = 25;
 
-  constructor(sessionId: string, matrix: EngineMatrix, engine: BayesianEngine, domain: "character" | "object" = "character") {
+  constructor(
+    sessionId: string,
+    matrix: EngineMatrix,
+    engine: BayesianEngine,
+    domain: "character" | "object" = "character",
+    difficulty: Difficulty = "easy",
+    categoryPack: CategoryPackId = "all"
+  ) {
     this.sessionId = sessionId;
     this.domain = domain;
+    this.difficulty = difficulty;
+    this.categoryPack = categoryPack;
     this.matrix = matrix;
     this.engine = engine;
-    this.posterior = this.engine.createInitialPosterior(this.domain);
+    this.penalties = new Float32Array(this.matrix.numEntities);
+
+    if (this.difficulty === "expert") {
+      this.hardQuestionLimit = 15;
+    } else if (this.difficulty === "hard") {
+      this.hardQuestionLimit = 20;
+    } else {
+      this.hardQuestionLimit = 25;
+    }
+
+    this.posterior = this.engine.computeProbabilities(
+      this.penalties,
+      this.domain,
+      this.difficulty,
+      this.categoryPack
+    );
   }
 
   public get currentCertainty(): number {
-    const top = this.engine.getTopCandidates(this.posterior, 2);
+    const top = this.engine.getTopCandidates(this.posterior, 2, this.domain, this.categoryPack);
     if (top.length === 0) return 0;
     const p1 = top[0].probability;
     const p2 = top.length > 1 ? top[1].probability : 0;
@@ -94,51 +123,20 @@ export class GameSessionManager {
   }
 
   /**
-   * Evaluates guess triggers based on rules:
-   * 1. Top P >= 0.80 AND gap to #2 >= 0.25 AND questions >= 8
-   * 2. Forced guess at question 25
-   * 3. No useful questions left
+   * Evaluates guess triggers:
+   * 1. Top item probability >= 70% and at least 8 questions asked.
+   * 2. Reached 20 questions.
+   * 3. No more available questions.
    */
   public shouldGuess(topCandidates: CandidateScore[], hasMoreQuestions: boolean): boolean {
     if (this.guesses.length >= this.maxGuesses) return false;
-    if (this.stepCount >= this.hardQuestionLimit) return true;
     if (!hasMoreQuestions) return true;
+    if (this.stepCount >= this.hardQuestionLimit) return true;
 
-    if (this.stepCount >= 25) {
-      // Forced guess at question 25
-      return true;
-    }
-
-    // Disambiguation barrier: after a rejected guess, require at least 2 questions before guessing again
-    const lastRejectedGuess = this.guesses[this.guesses.length - 1];
-    if (lastRejectedGuess && !lastRejectedGuess.accepted) {
-      const stepsSinceRejection = this.stepCount - lastRejectedGuess.step;
-      if (stepsSinceRejection < 2 && hasMoreQuestions) {
-        return false;
-      }
-    }
-
-    if (this.stepCount >= 8 && topCandidates.length > 0) {
+    if (topCandidates.length > 0) {
       const top1 = topCandidates[0].probability;
-      const top2 = topCandidates.length > 1 ? topCandidates[1].probability : 0;
-
-      // Early turns (8 - 11): require overwhelming certainty to prevent premature wrong guesses
-      if (this.stepCount <= 11) {
-        if (top1 >= 0.92 && top1 - top2 >= 0.35) {
-          return true;
-        }
-      }
-      // Mid turns (12 - 16): require solid confidence
-      else if (this.stepCount <= 16) {
-        if (top1 >= 0.85 && top1 - top2 >= 0.25) {
-          return true;
-        }
-      }
-      // Late turns (17 - 24): standard threshold
-      else {
-        if (top1 >= 0.78 && top1 - top2 >= 0.20) {
-          return true;
-        }
+      if (top1 >= 0.70 && this.stepCount >= 8) {
+        return true;
       }
     }
 
@@ -146,7 +144,9 @@ export class GameSessionManager {
   }
 
   /**
-   * Handles user's answer to the current question.
+   * Handles user's answer to the current question:
+   * Accumulates penalty, updates softmax probabilities, checks guess condition,
+   * and never shows "can't find answer" when candidates remain.
    */
   public answer(answerValue: number): {
     guess?: CandidateScore;
@@ -172,25 +172,26 @@ export class GameSessionManager {
     });
     this.askedQuestionIndices.add(qIdx);
 
-    // Update Bayesian posterior
-    this.posterior = this.engine.updatePosterior(
-      this.posterior,
-      qIdx,
-      answerValue,
-      this.contradictionWeakening
+    // Update penalties & compute new probabilities via softmax over (-penalty * k)
+    this.engine.updatePenalties(this.penalties, qIdx, answerValue, this.domain);
+    this.posterior = this.engine.computeProbabilities(
+      this.penalties,
+      this.domain,
+      this.difficulty,
+      this.categoryPack
     );
 
     // Check contradiction condition: if after 15 questions max P < 0.05
     if (this.stepCount >= 15 && !this.contradictionWeakening) {
-      const top = this.engine.getTopCandidates(this.posterior, 1);
+      const top = this.engine.getTopCandidates(this.posterior, 1, this.domain, this.categoryPack);
       if (top.length > 0 && top[0].probability < 0.05) {
         this.contradictionWeakening = true;
       }
     }
 
-    const topCandidates = this.engine.getTopCandidates(this.posterior, 5);
+    const topCandidates = this.engine.getTopCandidates(this.posterior, 5, this.domain, this.categoryPack);
 
-    // Check next question availability
+    // Select next question
     const nextQ = this.engine.selectNextQuestion(
       this.posterior,
       this.askedQuestionIndices,
@@ -202,7 +203,6 @@ export class GameSessionManager {
     const mustGuess = this.shouldGuess(topCandidates, nextQ !== null);
 
     if (mustGuess && topCandidates.length > 0) {
-      // Propose guess
       this.state = "guess_pending";
       this.pendingGuess = topCandidates[0];
       this.currentQuestionIdx = null;
@@ -213,7 +213,7 @@ export class GameSessionManager {
     }
 
     if (!nextQ || this.stepCount >= this.hardQuestionLimit) {
-      // Forced guess or loss
+      // Reached question limit or ran out of questions: ALWAYS make the best guess
       if (topCandidates.length > 0 && this.guesses.length < this.maxGuesses) {
         this.state = "guess_pending";
         this.pendingGuess = topCandidates[0];
@@ -241,9 +241,11 @@ export class GameSessionManager {
 
   /**
    * Handles user's confirmation of a guess ("Yes" or "No").
+   * If wrong: applies heavy penalty (+4.0), keeps asking, and guesses again (up to 3 guesses).
    */
   public confirmGuess(accepted: boolean): {
     state: GameState;
+    guess?: CandidateScore;
     question?: { id: number; text: string; step: number };
     closestWrongEntity?: CandidateScore;
   } {
@@ -262,16 +264,22 @@ export class GameSessionManager {
     if (accepted) {
       this.state = "won";
       this.pendingGuess = null;
-      return { state: "won" };
+      return { state: "won", guess: guessedEntity };
     }
 
     // Rejected guess:
-    // Penalize entity by setting its P to 0.01 * P and renormalize
-    this.posterior = this.engine.penalizeRejectedGuess(this.posterior, guessedEntity.entityIdx);
+    // Apply heavy penalty to that item, recompute probabilities, and keep guessing
+    this.engine.penalizeRejectedGuess(this.penalties, guessedEntity.entityIdx);
+    this.posterior = this.engine.computeProbabilities(
+      this.penalties,
+      this.domain,
+      this.difficulty,
+      this.categoryPack
+    );
     this.pendingGuess = null;
 
-    // Check if limits reached
-    if (this.guesses.length >= this.maxGuesses || this.stepCount >= this.hardQuestionLimit) {
+    // Check if max 3 guesses reached
+    if (this.guesses.length >= this.maxGuesses) {
       this.state = "lost";
       return {
         state: "lost",
@@ -279,8 +287,7 @@ export class GameSessionManager {
       };
     }
 
-    // Continue asking
-    this.state = "in_progress";
+    const topCandidates = this.engine.getTopCandidates(this.posterior, 5, this.domain, this.categoryPack);
     const nextQ = this.engine.selectNextQuestion(
       this.posterior,
       this.askedQuestionIndices,
@@ -289,14 +296,26 @@ export class GameSessionManager {
       this.domain
     );
 
-    if (!nextQ) {
-      this.state = "lost";
-      return {
-        state: "lost",
-        closestWrongEntity: guessedEntity
-      };
+    // If reached question limit (>= 20) or out of questions, guess next top candidate immediately
+    if (this.stepCount >= this.hardQuestionLimit || !nextQ) {
+      if (topCandidates.length > 0 && this.guesses.length < this.maxGuesses) {
+        this.state = "guess_pending";
+        this.pendingGuess = topCandidates[0];
+        this.currentQuestionIdx = null;
+        return {
+          state: "guess_pending"
+        };
+      } else {
+        this.state = "lost";
+        return {
+          state: "lost",
+          closestWrongEntity: guessedEntity
+        };
+      }
     }
 
+    // Keep asking
+    this.state = "in_progress";
     this.currentQuestionIdx = nextQ.questionIdx;
     return {
       state: "in_progress",
@@ -309,7 +328,7 @@ export class GameSessionManager {
   }
 
   /**
-   * Reconstructs state from initial prior + remaining answers after undo.
+   * Reconstructs state from penalty accumulation after undo.
    */
   public undo(): { question: { id: number; text: string; step: number } } {
     if (this.history.length === 0) {
@@ -319,38 +338,33 @@ export class GameSessionManager {
     // Remove the last answered question
     this.history.pop();
 
-    // Recompute posterior from scratch
-    this.posterior = this.engine.createInitialPosterior(this.domain);
+    // Reset penalties and asked set
+    this.penalties.fill(0.0);
     this.askedQuestionIndices.clear();
     this.contradictionWeakening = false;
 
+    // Replay remaining history
     for (let step = 0; step < this.history.length; step++) {
       const entry = this.history[step];
       this.askedQuestionIndices.add(entry.questionIdx);
-
-      this.posterior = this.engine.updatePosterior(
-        this.posterior,
-        entry.questionIdx,
-        entry.answerValue,
-        this.contradictionWeakening
-      );
-
-      if (step + 1 >= 15 && !this.contradictionWeakening) {
-        const top = this.engine.getTopCandidates(this.posterior, 1);
-        if (top.length > 0 && top[0].probability < 0.05) {
-          this.contradictionWeakening = true;
-        }
-      }
+      this.engine.updatePenalties(this.penalties, entry.questionIdx, entry.answerValue, this.domain);
     }
 
-    // Re-apply penalties for all rejected guesses that occurred up to the current step
+    // Re-apply penalties for rejected guesses that occurred up to the current step
     for (const g of this.guesses) {
       if (!g.accepted && g.step <= this.stepCount) {
-        this.posterior = this.engine.penalizeRejectedGuess(this.posterior, g.entityIdx);
+        this.engine.penalizeRejectedGuess(this.penalties, g.entityIdx);
       }
     }
 
-    // Reset pending guesses if undoing back into questioning
+    // Recompute probabilities
+    this.posterior = this.engine.computeProbabilities(
+      this.penalties,
+      this.domain,
+      this.difficulty,
+      this.categoryPack
+    );
+
     this.state = "in_progress";
     this.pendingGuess = null;
 

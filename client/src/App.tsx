@@ -1,6 +1,51 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { AdminPanel } from "./Admin.js";
 import { sounds } from "./soundEffects.js";
+import {
+  UserStats,
+  getUserStats,
+  recordGameCompletion,
+  resetUserStats,
+  calculateWinRate,
+  RecordResultOutcome
+} from "./userStats.js";
+import {
+  Achievement,
+  checkAndUnlockAchievements,
+  resetAchievements
+} from "./achievements.js";
+import { StatsModal } from "./StatsModal.js";
+import {
+  DailyChallengeData,
+  DailyResult,
+  DailyStreakState,
+  getDailyStreak,
+  getTodayResult,
+  recordDailyCompletion,
+  generateShareText,
+  copyShareText
+} from "./dailyChallenge.js";
+import { RoleReversalArena } from "./RoleReversalArena.js";
+import { TwoPlayerArena } from "./TwoPlayerArena.js";
+import { ChallengeCreatorModal } from "./ChallengeCreatorModal.js";
+import { LeaderboardModal } from "./LeaderboardModal.js";
+import { LeaderboardCategory } from "./leaderboard.js";
+import { QuickQuizArena } from "./QuickQuizArena.js";
+import {
+  CategoryPackId,
+  CategoryPackInfo,
+  DEFAULT_PACKS,
+  fetchCategoryPacks
+} from "./categoryPacks.js";
+import { CognitorDialogue, getCognitorDialogue } from "./personality.js";
+import { triggerConfetti } from "./confetti.js";
+import { saveGameHistoryEntry } from "./gameHistory.js";
+import { GameHistoryModal } from "./GameHistoryModal.js";
+import {
+  ChallengeData,
+  fetchChallengeDetails,
+  getChallengeCodeFromUrl
+} from "./friendChallenge.js";
 
 interface Question {
   id: number;
@@ -14,6 +59,7 @@ interface CandidateGuess {
   description: string | null;
   imageUrl: string | null;
   probability: number;
+  funFact?: string | null;
 }
 
 interface HistoryItem {
@@ -69,6 +115,71 @@ export default function App() {
   const [fallbackImage, setFallbackImage] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(sounds.enabled);
+  const [userStats, setUserStats] = useState<UserStats>(() => getUserStats());
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showGameHistoryModal, setShowGameHistoryModal] = useState(false);
+  const [statsInitialTab, setStatsInitialTab] = useState<"stats" | "achievements">("stats");
+  const [toastAchievement, setToastAchievement] = useState<Achievement | null>(null);
+  const [latestUnlockedBadges, setLatestUnlockedBadges] = useState<Achievement[]>([]);
+  const [lastResultOutcome, setLastResultOutcome] = useState<RecordResultOutcome | null>(null);
+
+  // Daily Challenge state
+  const [dailyData, setDailyData] = useState<DailyChallengeData | null>(null);
+  const [dailyResult, setDailyResult] = useState<DailyResult | null>(null);
+  const [dailyStreak, setDailyStreak] = useState<DailyStreakState>(() => getDailyStreak());
+  const [isDailyMode, setIsDailyMode] = useState<boolean>(false);
+  const [copiedShare, setCopiedShare] = useState<boolean>(false);
+  const [difficulty, setDifficulty] = useState<"easy" | "hard" | "expert">("easy");
+  const [maxQuestions, setMaxQuestions] = useState<number>(25);
+
+  // Thematic Category Packs state
+  const [selectedPack, setSelectedPack] = useState<CategoryPackId>("all");
+  const [availablePacks, setAvailablePacks] = useState<CategoryPackInfo[]>(DEFAULT_PACKS);
+
+  // Personality Dialogue state
+  const [currentDialogue, setCurrentDialogue] = useState<CognitorDialogue>({
+    mood: "opening",
+    moodLabel: "Attuning",
+    line: "Focus your mind... I am tuning into your thoughts."
+  });
+
+  // Role Reversal mode state
+  const [isReverseMode, setIsReverseMode] = useState<boolean>(false);
+  const [reverseDomain, setReverseDomain] = useState<"character" | "object">("object");
+
+  // Two-Player mode state
+  const [isTwoPlayerMode, setIsTwoPlayerMode] = useState<boolean>(false);
+
+  // Friend Challenge state
+  const [showChallengeModal, setShowChallengeModal] = useState<boolean>(false);
+  const [incomingChallenge, setIncomingChallenge] = useState<ChallengeData | null>(null);
+  const [challengeCodeInput, setChallengeCodeInput] = useState<string>("");
+
+  // Leaderboard state
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
+  const [leaderboardPrefill, setLeaderboardPrefill] = useState<{
+    category: LeaderboardCategory;
+    score: number;
+    entityName?: string;
+    domain?: "character" | "object";
+    difficulty?: "easy" | "hard" | "expert";
+  } | null>(null);
+  const [activeChallengeCode, setActiveChallengeCode] = useState<string | undefined>(undefined);
+  const [activeChallengeCreator, setActiveChallengeCreator] = useState<string | undefined>(undefined);
+  const [challengeLookupError, setChallengeLookupError] = useState<string>("");
+
+  // Quick Quiz mode state
+  const [isQuizMode, setIsQuizMode] = useState<boolean>(false);
+  const [quizDomain, setQuizDomain] = useState<"all" | "character" | "object">("all");
+
+  // Auto-dismiss achievement toast after 4.5 seconds
+  useEffect(() => {
+    if (!toastAchievement) return;
+    const timer = setTimeout(() => {
+      setToastAchievement(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [toastAchievement]);
 
   // Learn form state
   const [learnName, setLearnName] = useState("");
@@ -83,6 +194,21 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Load daily challenge
+  const fetchDailyChallenge = async () => {
+    try {
+      const res = await fetch("/api/daily");
+      if (res.ok) {
+        const data: DailyChallengeData = await res.json();
+        setDailyData(data);
+        const result = getTodayResult(data.date);
+        setDailyResult(result);
       }
     } catch {
       // ignore
@@ -118,8 +244,11 @@ export default function App() {
       }
       const data = await res.json();
       if (data.domain) setCurrentDomain(data.domain);
+      if (data.difficulty) setDifficulty(data.difficulty);
+      if (data.maxQuestions) setMaxQuestions(data.maxQuestions);
       if (data.certainty !== undefined) setCertainty(data.certainty);
       if (data.history) setHistory(data.history);
+      if (data.dialogue) setCurrentDialogue(data.dialogue);
 
       if (data.state === "in_progress" && data.question) {
         setSessionId(data.sessionId);
@@ -137,7 +266,17 @@ export default function App() {
 
   useEffect(() => {
     fetchStats();
+    fetchDailyChallenge();
+    fetchCategoryPacks().then((packs) => setAvailablePacks(packs));
     tryRestoreSession();
+
+    // Check if user visited via a challenge URL (?challenge=COG-XXXX)
+    const codeFromUrl = getChallengeCodeFromUrl();
+    if (codeFromUrl) {
+      fetchChallengeDetails(codeFromUrl)
+        .then((data) => setIncomingChallenge(data))
+        .catch(() => {});
+    }
 
     const handlePopState = () => {
       setIsAdminRoute(window.location.pathname === "/admin" || window.location.hash === "#admin");
@@ -145,6 +284,27 @@ export default function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  const handlePlayChallenge = (code: string, domain: "character" | "object", creator: string) => {
+    setActiveChallengeCode(code);
+    setActiveChallengeCreator(creator);
+    setReverseDomain(domain);
+    setIsReverseMode(true);
+    setIncomingChallenge(null);
+  };
+
+  const handleManualChallengeLookup = async () => {
+    const code = challengeCodeInput.trim().toUpperCase();
+    if (!code) return;
+    setChallengeLookupError("");
+    try {
+      const data = await fetchChallengeDetails(code);
+      handlePlayChallenge(data.code, data.domain, data.creatorName);
+      setChallengeCodeInput("");
+    } catch {
+      setChallengeLookupError("Challenge code not found. Check and try again.");
+    }
+  };
 
   const navigateToAdmin = () => {
     window.history.pushState({}, "", "/admin");
@@ -154,6 +314,10 @@ export default function App() {
   const navigateToHome = () => {
     window.history.pushState({}, "", "/");
     setIsAdminRoute(false);
+    setIsReverseMode(false);
+    setIsTwoPlayerMode(false);
+    setActiveChallengeCode(undefined);
+    setActiveChallengeCreator(undefined);
     fetchStats();
   };
 
@@ -162,11 +326,44 @@ export default function App() {
     setSoundEnabled(next);
   };
 
+  const handleResetUserStats = () => {
+    const reset = resetUserStats();
+    resetAchievements();
+    setUserStats(reset);
+    setLastResultOutcome(null);
+    setLatestUnlockedBadges([]);
+  };
+
+  const handleShareDaily = async () => {
+    if (!dailyResult) return;
+    const text = generateShareText(dailyResult, dailyStreak.currentStreak);
+    const ok = await copyShareText(text);
+    if (ok) {
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2500);
+    }
+  };
+
+  const startDailyGame = () => {
+    if (!dailyData) return;
+    startGame(dailyData.entity.domain, true);
+  };
+
   // Start new game
-  const startGame = async (domain: "character" | "object" = "character") => {
+  const startGame = async (
+    domain: "character" | "object" = "character",
+    isDaily: boolean = false,
+    diff?: "easy" | "hard" | "expert"
+  ) => {
+    const diffToUse = diff || difficulty;
+    setDifficulty(diffToUse);
     setLoading(true);
     setErrorMsg("");
     setLastAction(null);
+    setLastResultOutcome(null);
+    setLatestUnlockedBadges([]);
+    setIsDailyMode(isDaily);
+    setCopiedShare(false);
     setLearnSubmitted(false);
     setLearnName("");
     setLearnQuestion("");
@@ -181,15 +378,21 @@ export default function App() {
       const res = await fetch("/api/game/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain })
+        body: JSON.stringify({
+          domain,
+          difficulty: diffToUse,
+          categoryPack: isDaily ? "all" : selectedPack
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start game");
       setSessionId(data.sessionId);
       sessionStorage.setItem("cognitor_session_id", data.sessionId);
       setCurrentQuestion(data.question);
+      if (data.maxQuestions) setMaxQuestions(data.maxQuestions);
       if (data.certainty !== undefined) setCertainty(data.certainty);
       if (data.history) setHistory(data.history);
+      if (data.dialogue) setCurrentDialogue(data.dialogue);
       setGuess(null);
       setGameState("in_progress");
     } catch (err: any) {
@@ -222,6 +425,7 @@ export default function App() {
 
         if (data.certainty !== undefined) setCertainty(data.certainty);
         if (data.history) setHistory(data.history);
+        if (data.dialogue) setCurrentDialogue(data.dialogue);
 
         if (data.state === "guess_pending" && data.guess) {
           setGuess(data.guess);
@@ -239,6 +443,45 @@ export default function App() {
         } else if (data.state === "lost") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("lost");
+          sounds.playDefeat();
+          triggerConfetti({ count: 70 });
+          const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
+          const outcome = recordGameCompletion("lost", questionsUsed, currentDomain);
+          setUserStats(outcome.stats);
+          setLastResultOutcome(outcome);
+          saveGameHistoryEntry({
+            domain: currentDomain,
+            difficulty,
+            pack: selectedPack,
+            entityName: guess?.name || "Unknown Entity",
+            entityDescription: guess?.description,
+            imageUrl: guess?.imageUrl,
+            result: "lost",
+            stumpedCognitor: true,
+            questionsCount: questionsUsed,
+            questions: history.map((h) => ({
+              step: h.step,
+              text: h.questionText,
+              answerValue: h.answerValue,
+              answerLabel: answerLabel(h.answerValue)
+            }))
+          });
+          if (isDailyMode && dailyData) {
+            const dailyRec = recordDailyCompletion(dailyData, false, questionsUsed);
+            setDailyResult(dailyRec.result);
+            setDailyStreak(dailyRec.streak);
+          }
+          const achResult = checkAndUnlockAchievements(outcome.stats, {
+            outcome: "lost",
+            questionsUsed,
+            domain: currentDomain,
+            difficulty
+          });
+          if (achResult.newlyUnlocked.length > 0) {
+            sounds.playAchievement();
+            setToastAchievement(achResult.newlyUnlocked[0]);
+            setLatestUnlockedBadges(achResult.newlyUnlocked);
+          }
         }
       } catch (err: any) {
         setErrorMsg(err.message);
@@ -247,7 +490,7 @@ export default function App() {
         setLoading(false);
       }
     },
-    [sessionId, loading]
+    [sessionId, loading, currentDomain, currentQuestion, history, isDailyMode, dailyData, difficulty]
   );
 
   // Back / Undo
@@ -269,6 +512,15 @@ export default function App() {
       setCurrentQuestion(data.question);
       if (data.certainty !== undefined) setCertainty(data.certainty);
       if (data.history) setHistory(data.history);
+      if (data.question) {
+        const d = getCognitorDialogue({
+          step: data.question.step,
+          certainty: data.certainty || 0.1,
+          state: "in_progress",
+          seedKey: sessionId
+        });
+        setCurrentDialogue(d);
+      }
       setGuess(null);
       setImageFailed(false);
       setFallbackImage(null);
@@ -303,6 +555,13 @@ export default function App() {
         setCurrentQuestion(lastData.question);
         if (lastData.certainty !== undefined) setCertainty(lastData.certainty);
         if (lastData.history) setHistory(lastData.history);
+        const d = getCognitorDialogue({
+          step: lastData.question.step,
+          certainty: lastData.certainty || 0.1,
+          state: "in_progress",
+          seedKey: sessionId
+        });
+        setCurrentDialogue(d);
         setGuess(null);
         setGameState("in_progress");
       }
@@ -340,8 +599,51 @@ export default function App() {
         if (correct || data.state === "won") {
           sessionStorage.removeItem("cognitor_session_id");
           setGameState("won");
+          if (data.guess) {
+            setGuess(data.guess);
+          }
           sounds.playVictory();
+          sounds.playConfettiPop();
+          triggerConfetti();
           fetchStats();
+          const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
+          const outcome = recordGameCompletion("won", questionsUsed, currentDomain);
+          setUserStats(outcome.stats);
+          setLastResultOutcome(outcome);
+          saveGameHistoryEntry({
+            domain: currentDomain,
+            difficulty,
+            pack: selectedPack,
+            entityName: guess?.name || data.guess?.name || "Unknown Entity",
+            entityDescription: guess?.description || data.guess?.description,
+            imageUrl: guess?.imageUrl || data.guess?.imageUrl,
+            result: "won",
+            stumpedCognitor: false,
+            questionsCount: questionsUsed,
+            questions: history.map((h) => ({
+              step: h.step,
+              text: h.questionText,
+              answerValue: h.answerValue,
+              answerLabel: answerLabel(h.answerValue)
+            }))
+          });
+          if (isDailyMode && dailyData) {
+            const wonDaily = guess?.entityId === dailyData.entity.id;
+            const dailyRec = recordDailyCompletion(dailyData, wonDaily, questionsUsed);
+            setDailyResult(dailyRec.result);
+            setDailyStreak(dailyRec.streak);
+          }
+          const achResult = checkAndUnlockAchievements(outcome.stats, {
+            outcome: "won",
+            questionsUsed,
+            domain: currentDomain,
+            difficulty
+          });
+          if (achResult.newlyUnlocked.length > 0) {
+            sounds.playAchievement();
+            setToastAchievement(achResult.newlyUnlocked[0]);
+            setLatestUnlockedBadges(achResult.newlyUnlocked);
+          }
         } else {
           if (data.closestWrongEntity) {
             setClosestWrongEntity(data.closestWrongEntity);
@@ -352,7 +654,46 @@ export default function App() {
           if (data.state === "lost") {
             sessionStorage.removeItem("cognitor_session_id");
             setGameState("lost");
+            sounds.playDefeat();
+            triggerConfetti({ count: 70 });
             fetchStats();
+            const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
+            const outcome = recordGameCompletion("lost", questionsUsed, currentDomain);
+            setUserStats(outcome.stats);
+            setLastResultOutcome(outcome);
+            saveGameHistoryEntry({
+              domain: currentDomain,
+              difficulty,
+              pack: selectedPack,
+              entityName: data.closestWrongEntity?.name || guess?.name || "Unknown Entity",
+              entityDescription: data.closestWrongEntity?.description || guess?.description,
+              imageUrl: data.closestWrongEntity?.imageUrl || guess?.imageUrl,
+              result: "lost",
+              stumpedCognitor: true,
+              questionsCount: questionsUsed,
+              questions: history.map((h) => ({
+                step: h.step,
+                text: h.questionText,
+                answerValue: h.answerValue,
+                answerLabel: answerLabel(h.answerValue)
+              }))
+            });
+            if (isDailyMode && dailyData) {
+              const dailyRec = recordDailyCompletion(dailyData, false, questionsUsed);
+              setDailyResult(dailyRec.result);
+              setDailyStreak(dailyRec.streak);
+            }
+            const achResult = checkAndUnlockAchievements(outcome.stats, {
+              outcome: "lost",
+              questionsUsed,
+              domain: currentDomain,
+              difficulty
+            });
+            if (achResult.newlyUnlocked.length > 0) {
+              sounds.playAchievement();
+              setToastAchievement(achResult.newlyUnlocked[0]);
+              setLatestUnlockedBadges(achResult.newlyUnlocked);
+            }
           } else if (data.question) {
             setCurrentQuestion(data.question);
             setGuess(null);
@@ -368,7 +709,7 @@ export default function App() {
         setLoading(false);
       }
     },
-    [sessionId, guess, loading]
+    [sessionId, guess, loading, currentDomain, currentQuestion, history, isDailyMode, dailyData, difficulty]
   );
 
   // Keyboard shortcuts listener
@@ -448,6 +789,55 @@ export default function App() {
 
         <div className="nav-controls">
           <button
+            className="stats-toggle-btn leaderboard-nav-btn"
+            onClick={() => {
+              setLeaderboardPrefill(null);
+              setShowLeaderboardModal(true);
+            }}
+            title="Global Leaderboards"
+            aria-label="View Leaderboards"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+              <path d="M4 22h16"></path>
+              <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+              <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+            </svg>
+          </button>
+
+          <button
+            className="stats-toggle-btn"
+            onClick={() => setShowStatsModal(true)}
+            title="Player Stats & Streaks"
+            aria-label="View Stats and Streaks"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            {userStats.currentStreak > 1 && (
+              <span className="nav-streak-badge" title={`${userStats.currentStreak} deduction streak`}>
+                {userStats.currentStreak}
+              </span>
+            )}
+          </button>
+
+          <button
+            className="stats-toggle-btn"
+            onClick={() => setShowGameHistoryModal(true)}
+            title="Game History (Last 10 Games)"
+            aria-label="View Game History"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </button>
+
+          <button
             className="sound-toggle-btn"
             onClick={toggleSound}
             title={soundEnabled ? "Mute audio" : "Enable audio"}
@@ -467,15 +857,19 @@ export default function App() {
             )}
           </button>
 
-          {gameState !== "idle" && !isAdminRoute && (
+          {(gameState !== "idle" || isReverseMode || isTwoPlayerMode) && !isAdminRoute && (
             <button
               className="nav-reset-btn"
               onClick={() => {
                 setGameState("idle");
+                setIsReverseMode(false);
+                setIsTwoPlayerMode(false);
+                setActiveChallengeCode(undefined);
+                setActiveChallengeCreator(undefined);
                 sessionStorage.removeItem("cognitor_session_id");
               }}
             >
-              New Game
+              {isTwoPlayerMode ? "Exit 2-Player" : isReverseMode ? "Exit Reversal" : "New Game"}
             </button>
           )}
         </div>
@@ -496,6 +890,30 @@ export default function App() {
         <main className="akinator-main">
           <AdminPanel onBack={navigateToHome} />
         </main>
+      ) : isTwoPlayerMode ? (
+        <main className="akinator-main">
+          <TwoPlayerArena onExit={() => setIsTwoPlayerMode(false)} />
+        </main>
+      ) : isQuizMode ? (
+        <main className="akinator-main">
+          <QuickQuizArena
+            initialDomain={quizDomain}
+            onClose={() => setIsQuizMode(false)}
+          />
+        </main>
+      ) : isReverseMode ? (
+        <main className="akinator-main">
+          <RoleReversalArena
+            domain={reverseDomain}
+            challengeCode={activeChallengeCode}
+            challengeCreator={activeChallengeCreator}
+            onExit={() => {
+              setIsReverseMode(false);
+              setActiveChallengeCode(undefined);
+              setActiveChallengeCreator(undefined);
+            }}
+          />
+        </main>
       ) : (
         <main className="akinator-main">
           {/* ============================================================ */}
@@ -508,6 +926,169 @@ export default function App() {
                 <p className="bubble-hero-subtitle">
                   I will deduce who or what you are thinking of through a series of questions. Choose your domain to begin.
                 </p>
+              </div>
+
+              {incomingChallenge && (
+                <div className="incoming-challenge-card">
+                  <div className="incoming-challenge-badge">Friend Challenge Received</div>
+                  <h3 className="incoming-challenge-title">
+                    {incomingChallenge.creatorName} challenged you!
+                  </h3>
+                  <p className="incoming-challenge-desc">
+                    Can you deduce {incomingChallenge.creatorName}'s secret {incomingChallenge.domain === "character" ? "Character" : "Object"} in under 20 questions?
+                  </p>
+                  <div className="incoming-challenge-actions">
+                    <button
+                      className="btn btn-primary"
+                      onClick={() =>
+                        handlePlayChallenge(
+                          incomingChallenge.code,
+                          incomingChallenge.domain,
+                          incomingChallenge.creatorName
+                        )
+                      }
+                      type="button"
+                    >
+                      Accept Challenge
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setIncomingChallenge(null)}
+                      type="button"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {dailyData && (
+                <div className="daily-challenge-card">
+                  <div className="daily-header-row">
+                    <span className="daily-eyebrow">
+                      Daily Challenge #{dailyData.dayNumber} · {dailyData.date}
+                    </span>
+                    {dailyStreak.currentStreak > 0 && (
+                      <span className="daily-streak-badge">
+                        {dailyStreak.currentStreak} Day Streak
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="daily-target-display">
+                    <span className="daily-target-label">
+                      {dailyResult ? "Today's Target" : "Secret Target to Think Of"}
+                    </span>
+                    <span className="daily-target-name">{dailyData.entity.name}</span>
+                    {dailyData.entity.description && (
+                      <p className="daily-target-desc">{dailyData.entity.description}</p>
+                    )}
+                  </div>
+
+                  <div className="daily-actions-row">
+                    {!dailyResult ? (
+                      <button
+                        className="daily-play-btn"
+                        onClick={startDailyGame}
+                        disabled={loading}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        <span>Play Today's Challenge</span>
+                      </button>
+                    ) : (
+                      <>
+                        <div className="daily-completed-status">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                          <span>
+                            {dailyResult.won
+                              ? `Solved in ${dailyResult.questionsCount} questions`
+                              : "You beat Cognitor!"}
+                          </span>
+                        </div>
+                        <button
+                          className="daily-share-btn"
+                          onClick={handleShareDaily}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="18" cy="5" r="3"></circle>
+                            <circle cx="6" cy="12" r="3"></circle>
+                            <circle cx="18" cy="19" r="3"></circle>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                          </svg>
+                          <span>{copiedShare ? "Copied to Clipboard!" : "Share Result"}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="difficulty-selector-group">
+                <span className="difficulty-group-label">Difficulty Mode</span>
+                <div className="difficulty-btn-row">
+                  <button
+                    className={`difficulty-btn ${difficulty === "easy" ? "difficulty-btn-selected" : ""}`}
+                    onClick={() => {
+                      setDifficulty("easy");
+                      setMaxQuestions(25);
+                    }}
+                    type="button"
+                  >
+                    <span className="diff-title">Easy</span>
+                    <span className="diff-desc">Common items · 25 questions</span>
+                  </button>
+
+                  <button
+                    className={`difficulty-btn ${difficulty === "hard" ? "difficulty-btn-selected" : ""}`}
+                    onClick={() => {
+                      setDifficulty("hard");
+                      setMaxQuestions(20);
+                    }}
+                    type="button"
+                  >
+                    <span className="diff-title">Hard</span>
+                    <span className="diff-desc">Rare & niche · 20 questions</span>
+                  </button>
+
+                  <button
+                    className={`difficulty-btn diff-expert ${difficulty === "expert" ? "difficulty-btn-selected" : ""}`}
+                    onClick={() => {
+                      setDifficulty("expert");
+                      setMaxQuestions(15);
+                    }}
+                    type="button"
+                  >
+                    <span className="diff-title">Expert</span>
+                    <span className="diff-desc">Speed trial · 15 questions max</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pack-selection-section">
+                <div className="pack-header-row">
+                  <span className="diff-label">Thematic Category Pack:</span>
+                  <span className="pack-sublabel">
+                    {availablePacks.find((p) => p.id === selectedPack)?.description}
+                  </span>
+                </div>
+                <div className="pack-pill-row">
+                  {availablePacks.map((pack) => (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      className={`pack-pill-btn ${selectedPack === pack.id ? "pack-pill-active" : ""}`}
+                      onClick={() => setSelectedPack(pack.id)}
+                    >
+                      <span className="pack-pill-title">{pack.title}</span>
+                      <span className="pack-pill-count">{pack.itemCount}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="domain-selection-grid">
@@ -551,6 +1132,143 @@ export default function App() {
                   </div>
                 </button>
               </div>
+
+              <div className="reverse-mode-launch-card">
+                <div className="reverse-launch-header">
+                  <span className="reverse-launch-badge">Special Game Mode</span>
+                  <h3 className="reverse-launch-title">Role Reversal: You Guess, Cognitor Answers</h3>
+                  <p className="reverse-launch-desc">
+                    Cognitor secretly picks an entity from the database. Ask up to 20 yes/no questions and use your 3 guesses to deduce who or what it is.
+                  </p>
+                </div>
+                <div className="reverse-launch-actions">
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => {
+                      setReverseDomain("object");
+                      setIsReverseMode(true);
+                    }}
+                    type="button"
+                  >
+                    <span>Play Objects Mode</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => {
+                      setReverseDomain("character");
+                      setIsReverseMode(true);
+                    }}
+                    type="button"
+                  >
+                    <span>Play Characters Mode</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => setIsTwoPlayerMode(true)}
+                    type="button"
+                  >
+                    <span>2-Player Local Duel</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="friend-challenge-launch-card">
+                <div className="friend-launch-header">
+                  <span className="reverse-launch-badge">Social Mode</span>
+                  <h3 className="reverse-launch-title">Challenge a Friend & 2-Player</h3>
+                  <p className="reverse-launch-desc">
+                    Pick a secret target to generate a private link, or play a pass-and-play duel right on this device!
+                  </p>
+                </div>
+
+                <div className="friend-launch-controls">
+                  <button
+                    className="btn btn-primary friend-create-btn"
+                    onClick={() => setShowChallengeModal(true)}
+                    type="button"
+                  >
+                    <span>Create Challenge Link</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary friend-create-btn"
+                    onClick={() => setIsTwoPlayerMode(true)}
+                    type="button"
+                  >
+                    <span>Same-Device 2-Player</span>
+                  </button>
+
+                  <div className="friend-code-inline-form">
+                    <input
+                      type="text"
+                      className="friend-code-input"
+                      placeholder="Code (e.g. COG-4X9B)"
+                      value={challengeCodeInput}
+                      onChange={(e) => {
+                        setChallengeCodeInput(e.target.value.toUpperCase());
+                        setChallengeLookupError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleManualChallengeLookup();
+                      }}
+                      maxLength={12}
+                    />
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleManualChallengeLookup}
+                      disabled={!challengeCodeInput.trim()}
+                      type="button"
+                    >
+                      Play
+                    </button>
+                  </div>
+                </div>
+                {challengeLookupError && (
+                  <span className="friend-lookup-error">{challengeLookupError}</span>
+                )}
+              </div>
+
+              <div className="quiz-mode-launch-card">
+                <div className="reverse-launch-header">
+                  <span className="reverse-launch-badge">Trivia & Knowledge</span>
+                  <h3 className="reverse-launch-title">Quick Quiz: Test Your Deduction Knowledge</h3>
+                  <p className="reverse-launch-desc">
+                    Cognitor quizzes you! Identify characters and objects by their pictures, matrix traits, and fascinating fun facts across 5 rapid rounds.
+                  </p>
+                </div>
+                <div className="reverse-launch-actions">
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => {
+                      setQuizDomain("all");
+                      setIsQuizMode(true);
+                    }}
+                    type="button"
+                  >
+                    <span>Play All Items</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => {
+                      setQuizDomain("object");
+                      setIsQuizMode(true);
+                    }}
+                    type="button"
+                  >
+                    <span>Play Objects Quiz</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary reversal-launch-btn"
+                    onClick={() => {
+                      setQuizDomain("character");
+                      setIsQuizMode(true);
+                    }}
+                    type="button"
+                  >
+                    <span>Play Characters Quiz</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -559,13 +1277,39 @@ export default function App() {
           {/* ============================================================ */}
           {gameState === "in_progress" && currentQuestion && (
             <div className="arena-game-card">
+              {isDailyMode && dailyData && (
+                <div className="daily-active-banner">
+                  <span className="daily-active-tag">Daily Challenge #{dailyData.dayNumber}</span>
+                  <span className="daily-active-target">Thinking of: {dailyData.entity.name}</span>
+                </div>
+              )}
+
               {/* Turn Indicator */}
               <div className="arena-step-header">
-                <span className="q-step-badge">Question {currentQuestion.step}</span>
+                <span className="q-step-badge">Question {currentQuestion.step} of {maxQuestions}</span>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {selectedPack !== "all" && (
+                    <span className="mode-pill mode-pill-pack">
+                      {availablePacks.find((p) => p.id === selectedPack)?.title}
+                    </span>
+                  )}
+                  <span className={`mode-pill mode-pill-${difficulty}`}>
+                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} Mode
+                  </span>
+                </div>
               </div>
 
               {/* Speech Bubble Stage */}
               <div className="dialogue-stage">
+                {currentDialogue && (
+                  <div className="cognitor-speech-strip">
+                    <div className={`cognitor-mood-pill mood-${currentDialogue.mood}`}>
+                      <span className="cognitor-avatar-dot" />
+                      <span className="cognitor-mood-label">{currentDialogue.moodLabel}</span>
+                    </div>
+                    <p className="cognitor-dialogue-quote">"{currentDialogue.line}"</p>
+                  </div>
+                )}
                 <div className="question-speech-bubble">
                   <p className="bubble-question-text">{currentQuestion.text}</p>
                 </div>
@@ -695,6 +1439,9 @@ export default function App() {
               <div className="deduction-header">
                 <span className="deduction-eyebrow">My Deduction</span>
                 <h2 className="deduction-reveal-text">I think of...</h2>
+                {currentDialogue && (
+                  <p className="deduction-cognitor-quote">"{currentDialogue.line}"</p>
+                )}
               </div>
 
               <div className="deduction-portrait-wrapper">
@@ -755,8 +1502,77 @@ export default function App() {
                 <span className="result-trophy-tag">Deduction Confirmed</span>
                 <h2 className="result-title">Mind Read Successfully</h2>
                 <p className="result-detail">
-                  I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions.
+                  I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions ({difficulty} mode{selectedPack !== "all" ? ` · ${availablePacks.find((p) => p.id === selectedPack)?.title}` : ""}).
                 </p>
+
+                <div className="player-stats-banner">
+                  <div className="stat-pill">
+                    <span className="stat-pill-label">Streak</span>
+                    <span className="stat-pill-val">{userStats.currentStreak} in a row</span>
+                  </div>
+                  <div className="stat-pill">
+                    <span className="stat-pill-label">Fastest Guess</span>
+                    <span className="stat-pill-val">
+                      {userStats.fastestGuess !== null ? `${userStats.fastestGuess} Qs` : "-"}
+                    </span>
+                    {lastResultOutcome?.isNewBest && (
+                      <span className="stat-pill-tag">New Record!</span>
+                    )}
+                  </div>
+                  <div className="stat-pill">
+                    <span className="stat-pill-label">Accuracy</span>
+                    <span className="stat-pill-val">{calculateWinRate(userStats)}%</span>
+                  </div>
+                </div>
+
+                {latestUnlockedBadges.length > 0 && (
+                  <div
+                    className="new-achievements-shelf"
+                    onClick={() => {
+                      setStatsInitialTab("achievements");
+                      setShowStatsModal(true);
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <span className="shelf-title">Badge Unlocked!</span>
+                    <div className="shelf-badge-list">
+                      {latestUnlockedBadges.map((b) => (
+                        <span key={b.id} className="shelf-badge-item">
+                          {b.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {isDailyMode && dailyResult && (
+                  <div className="daily-challenge-card" style={{ margin: "1rem 0" }}>
+                    <div className="daily-header-row">
+                      <span className="daily-eyebrow">Daily Challenge #{dailyResult.dayNumber} Result</span>
+                      {dailyStreak.currentStreak > 0 && (
+                        <span className="daily-streak-badge">{dailyStreak.currentStreak} Day Streak</span>
+                      )}
+                    </div>
+                    <p className="daily-target-desc">
+                      Cognitor deduced {dailyResult.targetName} in {dailyResult.questionsCount} questions!
+                    </p>
+                    <button className="daily-share-btn" onClick={handleShareDaily}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                      </svg>
+                      <span>{copiedShare ? "Copied to Clipboard!" : "Share Daily Result"}</span>
+                    </button>
+                    {dailyData?.entity.funFact && (
+                      <p className="daily-fun-fact-text">
+                        <strong>Did you know?</strong> {dailyData.entity.funFact}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {guess && (
                   <div className="result-entity-preview">
@@ -780,6 +1596,20 @@ export default function App() {
                   </div>
                 )}
 
+                {guess && guess.funFact && (
+                  <div className="fun-fact-card">
+                    <div className="fun-fact-header">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18h6"></path>
+                        <path d="M10 22h4"></path>
+                        <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
+                      </svg>
+                      <span className="fun-fact-title">Did You Know?</span>
+                    </div>
+                    <p className="fun-fact-text">{guess.funFact}</p>
+                  </div>
+                )}
+
                 <div className="result-btn-group">
                   <button
                     className="akinator-btn btn-yes"
@@ -792,6 +1622,38 @@ export default function App() {
                     onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
                   >
                     Switch to {currentDomain === "object" ? "Characters" : "Objects"}
+                  </button>
+                  <button
+                    className="akinator-btn btn-dontknow"
+                    onClick={() => {
+                      const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
+                      if (isDailyMode) {
+                        setLeaderboardPrefill({
+                          category: "daily",
+                          score: dailyResult ? dailyResult.questionsCount : questionsUsed,
+                          entityName: dailyResult ? dailyResult.targetName : guess?.name,
+                          domain: currentDomain,
+                          difficulty
+                        });
+                      } else {
+                        setLeaderboardPrefill({
+                          category: "fastest_guess",
+                          score: questionsUsed,
+                          entityName: guess?.name,
+                          domain: currentDomain,
+                          difficulty
+                        });
+                      }
+                      setShowLeaderboardModal(true);
+                    }}
+                  >
+                    Submit to Leaderboard
+                  </button>
+                  <button
+                    className="akinator-btn btn-probnot"
+                    onClick={() => setShowGameHistoryModal(true)}
+                  >
+                    Game History
                   </button>
                 </div>
               </div>
@@ -823,8 +1685,101 @@ export default function App() {
               <span className="result-trophy-tag">Well Played</span>
               <h2 className="result-title">You Defeated Me</h2>
               <p className="result-detail">
-                I could not deduce who or what you were thinking of within the question limits. Teach Cognitor what you were thinking of to sharpen future games.
+                I could not deduce who or what you were thinking of within the {maxQuestions}-question limit ({difficulty} mode). Teach Cognitor what you were thinking of to sharpen future games.
               </p>
+
+              <div className="player-stats-banner">
+                <div className="stat-pill stat-pill-highlight">
+                  <span className="stat-pill-label">Times You Stumped Cognitor</span>
+                  <span className="stat-pill-val">{userStats.stumpedCount}</span>
+                </div>
+                <div className="stat-pill">
+                  <span className="stat-pill-label">Total Games</span>
+                  <span className="stat-pill-val">{userStats.gamesPlayed}</span>
+                </div>
+              </div>
+
+              <div style={{ textAlign: "center", margin: "0.75rem 0" }}>
+                <button
+                  type="button"
+                  className="game-btn game-btn-secondary"
+                  onClick={() => {
+                    setLeaderboardPrefill({
+                      category: "stumped",
+                      score: maxQuestions,
+                      entityName: learnName || undefined,
+                      domain: currentDomain,
+                      difficulty
+                    });
+                    setShowLeaderboardModal(true);
+                  }}
+                >
+                  Submit to Stumped Hall of Fame
+                </button>
+              </div>
+
+              {latestUnlockedBadges.length > 0 && (
+                <div
+                  className="new-achievements-shelf"
+                  onClick={() => {
+                    setStatsInitialTab("achievements");
+                    setShowStatsModal(true);
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  <span className="shelf-title">Badge Unlocked!</span>
+                  <div className="shelf-badge-list">
+                    {latestUnlockedBadges.map((b) => (
+                      <span key={b.id} className="shelf-badge-item">
+                        {b.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isDailyMode && dailyResult && (
+                <div className="daily-challenge-card" style={{ margin: "1rem 0" }}>
+                  <div className="daily-header-row">
+                    <span className="daily-eyebrow">Daily Challenge #{dailyResult.dayNumber} Result</span>
+                    {dailyStreak.currentStreak > 0 && (
+                      <span className="daily-streak-badge">{dailyStreak.currentStreak} Day Streak</span>
+                    )}
+                  </div>
+                  <p className="daily-target-desc">
+                    You beat Cognitor on today's target ({dailyResult.targetName})!
+                  </p>
+                  <button className="daily-share-btn" onClick={handleShareDaily}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3"></circle>
+                      <circle cx="6" cy="12" r="3"></circle>
+                      <circle cx="18" cy="19" r="3"></circle>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                    </svg>
+                    <span>{copiedShare ? "Copied to Clipboard!" : "Share Daily Result"}</span>
+                  </button>
+                  {dailyData?.entity.funFact && (
+                    <p className="daily-fun-fact-text">
+                      <strong>Did you know?</strong> {dailyData.entity.funFact}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {closestWrongEntity && closestWrongEntity.funFact && (
+                <div className="fun-fact-card" style={{ margin: "1rem 0" }}>
+                  <div className="fun-fact-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18h6"></path>
+                      <path d="M10 22h4"></path>
+                      <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
+                    </svg>
+                    <span className="fun-fact-title">Did You Know? (Closest guess: {closestWrongEntity.name})</span>
+                  </div>
+                  <p className="fun-fact-text">{closestWrongEntity.funFact}</p>
+                </div>
+              )}
 
               {learnSubmitted ? (
                 <div className="learn-success-card">
@@ -900,6 +1855,62 @@ export default function App() {
             </div>
           )}
         </main>
+      )}
+
+      <StatsModal
+        isOpen={showStatsModal}
+        onClose={() => setShowStatsModal(false)}
+        stats={userStats}
+        onReset={handleResetUserStats}
+        initialTab={statsInitialTab}
+      />
+
+      <ChallengeCreatorModal
+        isOpen={showChallengeModal}
+        onClose={() => setShowChallengeModal(false)}
+        onPlayChallenge={(code, dom, creator) => handlePlayChallenge(code, dom, creator)}
+      />
+
+      <LeaderboardModal
+        isOpen={showLeaderboardModal}
+        onClose={() => setShowLeaderboardModal(false)}
+        prefillSubmit={leaderboardPrefill}
+      />
+
+      <GameHistoryModal
+        isOpen={showGameHistoryModal}
+        onClose={() => setShowGameHistoryModal(false)}
+      />
+
+      {toastAchievement && (
+        <div
+          className="achievement-toast"
+          onClick={() => {
+            setStatsInitialTab("achievements");
+            setShowStatsModal(true);
+            setToastAchievement(null);
+          }}
+          role="alert"
+        >
+          <div className="achievement-toast-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div className="achievement-toast-body">
+            <span className="achievement-toast-eyebrow">Achievement Unlocked</span>
+            <span className="achievement-toast-title">{toastAchievement.title}</span>
+          </div>
+        </div>
       )}
 
       {/* DISCREET MINIMAL FOOTER */}

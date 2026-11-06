@@ -1,4 +1,5 @@
 import { IStorage } from "../db/types.js";
+import { getFunFactForEntity } from "../services/funFactService.js";
 
 export interface EntityMeta {
   id: number;
@@ -7,6 +8,7 @@ export interface EntityMeta {
   imageUrl: string | null;
   popularity: number;
   category: "character" | "object";
+  funFact?: string | null;
 }
 
 export interface QuestionMeta {
@@ -61,7 +63,8 @@ export class EngineMatrix {
       description: e.description,
       imageUrl: e.imageUrl,
       popularity: e.popularity,
-      category: (e.category as "character" | "object") || "character"
+      category: (e.category as "character" | "object") || "character",
+      funFact: e.funFact || getFunFactForEntity(e.id, e.name, e.category, e.description || undefined)
     }));
 
     this.questions = rawQuestions.map((q) => ({

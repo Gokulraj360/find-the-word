@@ -165,4 +165,68 @@ describe("Cognitor REST API Endpoints", () => {
     const approveData = await approveRes.json();
     expect(approveData.success).toBe(true);
   });
+
+  it("POST /api/challenge/create and GET /api/challenge/:code should manage friend challenges", async () => {
+    // Create challenge
+    const createRes = await fetch(`${baseUrl}/api/challenge/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        domain: "character",
+        entityId: 1,
+        creatorName: "Antigravity"
+      })
+    });
+    expect(createRes.status).toBe(200);
+    const challenge = await createRes.json();
+    expect(challenge.code).toBeDefined();
+    expect(challenge.creatorName).toBe("Antigravity");
+
+    // Retrieve challenge (safe)
+    const getRes = await fetch(`${baseUrl}/api/challenge/${challenge.code}`);
+    expect(getRes.status).toBe(200);
+    const safeData = await getRes.json();
+    expect(safeData.creatorName).toBe("Antigravity");
+    expect(safeData.domain).toBe("character");
+    expect(safeData.revealedEntityName).toBeUndefined(); // Secret kept!
+
+    // Start challenge game
+    const startRes = await fetch(`${baseUrl}/api/challenge/${challenge.code}/start`, {
+      method: "POST"
+    });
+    expect(startRes.status).toBe(200);
+    const startData = await startRes.json();
+    expect(startData.sessionId).toBeDefined();
+    expect(startData.challengeCode).toBe(challenge.code);
+  });
+
+  it("GET /api/leaderboard and POST /api/leaderboard/submit manage records", async () => {
+    // GET leaderboard
+    const getRes = await fetch(`${baseUrl}/api/leaderboard?category=fastest_guess`);
+    expect(getRes.status).toBe(200);
+    const getData = await getRes.json();
+    expect(Array.isArray(getData.entries)).toBe(true);
+    expect(getData.summary).toBeDefined();
+    expect(typeof getData.summary.totalSubmissions).toBe("number");
+
+    // POST submit score
+    const postRes = await fetch(`${baseUrl}/api/leaderboard/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerName: "TestHero",
+        category: "fastest_guess",
+        score: 5,
+        entityName: "Albert Einstein",
+        domain: "character",
+        difficulty: "hard"
+      })
+    });
+    expect(postRes.status).toBe(200);
+    const postData = await postRes.json();
+    expect(postData.success).toBe(true);
+    expect(postData.entry).toBeDefined();
+    expect(postData.entry.playerName).toBe("TestHero");
+    expect(postData.entry.score).toBe(5);
+  });
 });
