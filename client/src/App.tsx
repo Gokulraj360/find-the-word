@@ -40,7 +40,7 @@ import {
 import { CognitorDialogue, getCognitorDialogue } from "./personality.js";
 import { triggerConfetti } from "./confetti.js";
 import { saveGameHistoryEntry } from "./gameHistory.js";
-import { GameHistoryModal } from "./GameHistoryModal.js";
+import { GameModesModal } from "./GameModesModal.js";
 import {
   ChallengeData,
   fetchChallengeDetails,
@@ -117,8 +117,9 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(sounds.enabled);
   const [userStats, setUserStats] = useState<UserStats>(() => getUserStats());
   const [showStatsModal, setShowStatsModal] = useState(false);
-  const [showGameHistoryModal, setShowGameHistoryModal] = useState(false);
-  const [statsInitialTab, setStatsInitialTab] = useState<"stats" | "achievements">("stats");
+  const [showGameModesModal, setShowGameModesModal] = useState(false);
+  const [showPathway, setShowPathway] = useState(false);
+  const [statsInitialTab, setStatsInitialTab] = useState<"stats" | "achievements" | "history">("stats");
   const [toastAchievement, setToastAchievement] = useState<Achievement | null>(null);
   const [latestUnlockedBadges, setLatestUnlockedBadges] = useState<Achievement[]>([]);
   const [lastResultOutcome, setLastResultOutcome] = useState<RecordResultOutcome | null>(null);
@@ -826,18 +827,6 @@ export default function App() {
           </button>
 
           <button
-            className="stats-toggle-btn"
-            onClick={() => setShowGameHistoryModal(true)}
-            title="Game History (Last 10 Games)"
-            aria-label="View Game History"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </button>
-
-          <button
             className="sound-toggle-btn"
             onClick={toggleSound}
             title={soundEnabled ? "Mute audio" : "Enable audio"}
@@ -917,29 +906,36 @@ export default function App() {
       ) : (
         <main className="akinator-main">
           {/* ============================================================ */}
-          {/* WELCOME / IDLE ARENA */}
+          {/* WELCOME / IDLE ARENA (CLEAN AKINATOR-STYLE) */}
           {/* ============================================================ */}
           {gameState === "idle" && (
-            <div className="arena-welcome-card">
-              <div className="welcome-speech-bubble">
-                <h1 className="bubble-hero-title">Think of a character or object</h1>
-                <p className="bubble-hero-subtitle">
-                  I will deduce who or what you are thinking of through a series of questions. Choose your domain to begin.
+            <div className="hero-akinator-stage">
+              <div className="hero-mystic-emblem">
+                <div className="mystic-orb-ring" />
+                <div className="mystic-orb-core">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                    <path d="M2 12h20"></path>
+                  </svg>
+                </div>
+              </div>
+
+              <div className="hero-text-block">
+                <h1 className="hero-headline">Think of anyone or anything</h1>
+                <p className="hero-subline">
+                  I will deduce who or what you are thinking of through a series of questions.
                 </p>
               </div>
 
               {incomingChallenge && (
-                <div className="incoming-challenge-card">
-                  <div className="incoming-challenge-badge">Friend Challenge Received</div>
-                  <h3 className="incoming-challenge-title">
-                    {incomingChallenge.creatorName} challenged you!
-                  </h3>
-                  <p className="incoming-challenge-desc">
-                    Can you deduce {incomingChallenge.creatorName}'s secret {incomingChallenge.domain === "character" ? "Character" : "Object"} in under 20 questions?
-                  </p>
-                  <div className="incoming-challenge-actions">
+                <div className="incoming-challenge-pill">
+                  <span className="incoming-pill-text">
+                    Challenge from <strong>{incomingChallenge.creatorName}</strong> ({incomingChallenge.domain})!
+                  </span>
+                  <div className="incoming-pill-btns">
                     <button
-                      className="btn btn-primary"
+                      className="btn btn-sm btn-primary"
                       onClick={() =>
                         handlePlayChallenge(
                           incomingChallenge.code,
@@ -949,10 +945,10 @@ export default function App() {
                       }
                       type="button"
                     >
-                      Accept Challenge
+                      Accept
                     </button>
                     <button
-                      className="btn btn-secondary"
+                      className="btn btn-sm btn-secondary"
                       onClick={() => setIncomingChallenge(null)}
                       type="button"
                     >
@@ -962,313 +958,86 @@ export default function App() {
                 </div>
               )}
 
+              {/* Sleek Domain Segmented Control */}
+              <div className="domain-segmented-control" role="tablist">
+                <button
+                  type="button"
+                  className={`domain-segment-btn ${currentDomain === "character" ? "domain-segment-active" : ""}`}
+                  onClick={() => setCurrentDomain("character")}
+                  role="tab"
+                  aria-selected={currentDomain === "character"}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                  <span>Characters</span>
+                </button>
+                <button
+                  type="button"
+                  className={`domain-segment-btn ${currentDomain === "object" ? "domain-segment-active" : ""}`}
+                  onClick={() => setCurrentDomain("object")}
+                  role="tab"
+                  aria-selected={currentDomain === "object"}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                  </svg>
+                  <span>Objects</span>
+                </button>
+              </div>
+
+              {/* Big Iconic Play Button */}
+              <button
+                className="hero-play-btn"
+                onClick={() => startGame(currentDomain)}
+                disabled={loading}
+              >
+                <span>Play</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </button>
+
+              {/* Compact Daily Challenge Strip */}
               {dailyData && (
-                <div className="daily-challenge-card">
-                  <div className="daily-header-row">
-                    <span className="daily-eyebrow">
-                      Daily Challenge #{dailyData.dayNumber} · {dailyData.date}
-                    </span>
+                <div className="hero-daily-strip">
+                  <div className="hero-daily-info">
+                    <span className="daily-strip-badge">Daily #{dailyData.dayNumber}</span>
                     {dailyStreak.currentStreak > 0 && (
-                      <span className="daily-streak-badge">
-                        {dailyStreak.currentStreak} Day Streak
-                      </span>
+                      <span className="daily-strip-streak">{dailyStreak.currentStreak} Day Streak</span>
                     )}
-                  </div>
-
-                  <div className="daily-target-display">
-                    <span className="daily-target-label">
-                      {dailyResult ? "Today's Target" : "Secret Target to Think Of"}
+                    <span className="daily-strip-clue">
+                      {dailyResult ? `Solved in ${dailyResult.questionsCount} Qs` : `Target: "${dailyData.entity.name}"`}
                     </span>
-                    <span className="daily-target-name">{dailyData.entity.name}</span>
-                    {dailyData.entity.description && (
-                      <p className="daily-target-desc">{dailyData.entity.description}</p>
-                    )}
                   </div>
-
-                  <div className="daily-actions-row">
-                    {!dailyResult ? (
-                      <button
-                        className="daily-play-btn"
-                        onClick={startDailyGame}
-                        disabled={loading}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                        </svg>
-                        <span>Play Today's Challenge</span>
-                      </button>
-                    ) : (
-                      <>
-                        <div className="daily-completed-status">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                          <span>
-                            {dailyResult.won
-                              ? `Solved in ${dailyResult.questionsCount} questions`
-                              : "You beat Cognitor!"}
-                          </span>
-                        </div>
-                        <button
-                          className="daily-share-btn"
-                          onClick={handleShareDaily}
-                        >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="18" cy="5" r="3"></circle>
-                            <circle cx="6" cy="12" r="3"></circle>
-                            <circle cx="18" cy="19" r="3"></circle>
-                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                          </svg>
-                          <span>{copiedShare ? "Copied to Clipboard!" : "Share Result"}</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  {!dailyResult ? (
+                    <button className="daily-strip-btn" onClick={startDailyGame} disabled={loading}>
+                      Play Daily
+                    </button>
+                  ) : (
+                    <button className="daily-strip-btn" onClick={handleShareDaily}>
+                      Share
+                    </button>
+                  )}
                 </div>
               )}
 
-              <div className="difficulty-selector-group">
-                <span className="difficulty-group-label">Difficulty Mode</span>
-                <div className="difficulty-btn-row">
-                  <button
-                    className={`difficulty-btn ${difficulty === "easy" ? "difficulty-btn-selected" : ""}`}
-                    onClick={() => {
-                      setDifficulty("easy");
-                      setMaxQuestions(25);
-                    }}
-                    type="button"
-                  >
-                    <span className="diff-title">Easy</span>
-                    <span className="diff-desc">Common items · 25 questions</span>
-                  </button>
-
-                  <button
-                    className={`difficulty-btn ${difficulty === "hard" ? "difficulty-btn-selected" : ""}`}
-                    onClick={() => {
-                      setDifficulty("hard");
-                      setMaxQuestions(20);
-                    }}
-                    type="button"
-                  >
-                    <span className="diff-title">Hard</span>
-                    <span className="diff-desc">Rare & niche · 20 questions</span>
-                  </button>
-
-                  <button
-                    className={`difficulty-btn diff-expert ${difficulty === "expert" ? "difficulty-btn-selected" : ""}`}
-                    onClick={() => {
-                      setDifficulty("expert");
-                      setMaxQuestions(15);
-                    }}
-                    type="button"
-                  >
-                    <span className="diff-title">Expert</span>
-                    <span className="diff-desc">Speed trial · 15 questions max</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="pack-selection-section">
-                <div className="pack-header-row">
-                  <span className="diff-label">Thematic Category Pack:</span>
-                  <span className="pack-sublabel">
-                    {availablePacks.find((p) => p.id === selectedPack)?.description}
-                  </span>
-                </div>
-                <div className="pack-pill-row">
-                  {availablePacks.map((pack) => (
-                    <button
-                      key={pack.id}
-                      type="button"
-                      className={`pack-pill-btn ${selectedPack === pack.id ? "pack-pill-active" : ""}`}
-                      onClick={() => setSelectedPack(pack.id)}
-                    >
-                      <span className="pack-pill-title">{pack.title}</span>
-                      <span className="pack-pill-count">{pack.itemCount}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="domain-selection-grid">
-                <button
-                  className={`domain-card ${currentDomain === "character" ? "domain-selected" : ""}`}
-                  onClick={() => startGame("character")}
-                  disabled={loading}
-                >
-                  <div className="domain-card-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="12" cy="7" r="4"></circle>
-                    </svg>
-                  </div>
-                  <div className="domain-card-content">
-                    <span className="domain-card-label">Living and Fictional</span>
-                    <span className="domain-card-title">Characters and Figures</span>
-                    <span className="domain-card-desc">
-                      Real celebrities, historical leaders, anime icons, superheroes, and authors.
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  className={`domain-card ${currentDomain === "object" ? "domain-selected" : ""}`}
-                  onClick={() => startGame("object")}
-                  disabled={loading}
-                >
-                  <div className="domain-card-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                    </svg>
-                  </div>
-                  <div className="domain-card-content">
-                    <span className="domain-card-label">Everyday World</span>
-                    <span className="domain-card-title">Objects and Items</span>
-                    <span className="domain-card-desc">
-                      Electronics, appliances, vehicles, musical instruments, tools, and household gear.
-                    </span>
-                  </div>
-                </button>
-              </div>
-
-              <div className="reverse-mode-launch-card">
-                <div className="reverse-launch-header">
-                  <span className="reverse-launch-badge">Special Game Mode</span>
-                  <h3 className="reverse-launch-title">Role Reversal: You Guess, Cognitor Answers</h3>
-                  <p className="reverse-launch-desc">
-                    Cognitor secretly picks an entity from the database. Ask up to 20 yes/no questions and use your 3 guesses to deduce who or what it is.
-                  </p>
-                </div>
-                <div className="reverse-launch-actions">
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => {
-                      setReverseDomain("object");
-                      setIsReverseMode(true);
-                    }}
-                    type="button"
-                  >
-                    <span>Play Objects Mode</span>
-                  </button>
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => {
-                      setReverseDomain("character");
-                      setIsReverseMode(true);
-                    }}
-                    type="button"
-                  >
-                    <span>Play Characters Mode</span>
-                  </button>
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => setIsTwoPlayerMode(true)}
-                    type="button"
-                  >
-                    <span>2-Player Local Duel</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="friend-challenge-launch-card">
-                <div className="friend-launch-header">
-                  <span className="reverse-launch-badge">Social Mode</span>
-                  <h3 className="reverse-launch-title">Challenge a Friend & 2-Player</h3>
-                  <p className="reverse-launch-desc">
-                    Pick a secret target to generate a private link, or play a pass-and-play duel right on this device!
-                  </p>
-                </div>
-
-                <div className="friend-launch-controls">
-                  <button
-                    className="btn btn-primary friend-create-btn"
-                    onClick={() => setShowChallengeModal(true)}
-                    type="button"
-                  >
-                    <span>Create Challenge Link</span>
-                  </button>
-
-                  <button
-                    className="btn btn-secondary friend-create-btn"
-                    onClick={() => setIsTwoPlayerMode(true)}
-                    type="button"
-                  >
-                    <span>Same-Device 2-Player</span>
-                  </button>
-
-                  <div className="friend-code-inline-form">
-                    <input
-                      type="text"
-                      className="friend-code-input"
-                      placeholder="Code (e.g. COG-4X9B)"
-                      value={challengeCodeInput}
-                      onChange={(e) => {
-                        setChallengeCodeInput(e.target.value.toUpperCase());
-                        setChallengeLookupError("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleManualChallengeLookup();
-                      }}
-                      maxLength={12}
-                    />
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={handleManualChallengeLookup}
-                      disabled={!challengeCodeInput.trim()}
-                      type="button"
-                    >
-                      Play
-                    </button>
-                  </div>
-                </div>
-                {challengeLookupError && (
-                  <span className="friend-lookup-error">{challengeLookupError}</span>
-                )}
-              </div>
-
-              <div className="quiz-mode-launch-card">
-                <div className="reverse-launch-header">
-                  <span className="reverse-launch-badge">Trivia & Knowledge</span>
-                  <h3 className="reverse-launch-title">Quick Quiz: Test Your Deduction Knowledge</h3>
-                  <p className="reverse-launch-desc">
-                    Cognitor quizzes you! Identify characters and objects by their pictures, matrix traits, and fascinating fun facts across 5 rapid rounds.
-                  </p>
-                </div>
-                <div className="reverse-launch-actions">
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => {
-                      setQuizDomain("all");
-                      setIsQuizMode(true);
-                    }}
-                    type="button"
-                  >
-                    <span>Play All Items</span>
-                  </button>
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => {
-                      setQuizDomain("object");
-                      setIsQuizMode(true);
-                    }}
-                    type="button"
-                  >
-                    <span>Play Objects Quiz</span>
-                  </button>
-                  <button
-                    className="btn btn-secondary reversal-launch-btn"
-                    onClick={() => {
-                      setQuizDomain("character");
-                      setIsQuizMode(true);
-                    }}
-                    type="button"
-                  >
-                    <span>Play Characters Quiz</span>
-                  </button>
-                </div>
-              </div>
+              {/* More Game Modes Trigger */}
+              <button
+                type="button"
+                className="modes-sheet-trigger"
+                onClick={() => setShowGameModesModal(true)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>More Game Modes · 2-Player, Role Reversal, Trivia & Friends</span>
+              </button>
             </div>
           )}
 
@@ -1286,28 +1055,18 @@ export default function App() {
 
               {/* Turn Indicator */}
               <div className="arena-step-header">
-                <span className="q-step-badge">Question {currentQuestion.step} of {maxQuestions}</span>
-                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                  {selectedPack !== "all" && (
-                    <span className="mode-pill mode-pill-pack">
-                      {availablePacks.find((p) => p.id === selectedPack)?.title}
-                    </span>
-                  )}
-                  <span className={`mode-pill mode-pill-${difficulty}`}>
-                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} Mode
-                  </span>
-                </div>
+                <span className="q-step-badge">Question {currentQuestion.step}</span>
+                {isDailyMode && dailyData && (
+                  <span className="daily-active-tag">Daily Challenge #{dailyData.dayNumber}</span>
+                )}
               </div>
 
               {/* Speech Bubble Stage */}
               <div className="dialogue-stage">
                 {currentDialogue && (
-                  <div className="cognitor-speech-strip">
-                    <div className={`cognitor-mood-pill mood-${currentDialogue.mood}`}>
-                      <span className="cognitor-avatar-dot" />
-                      <span className="cognitor-mood-label">{currentDialogue.moodLabel}</span>
-                    </div>
-                    <p className="cognitor-dialogue-quote">"{currentDialogue.line}"</p>
+                  <div className="cognitor-thought-strip">
+                    <span className="thought-orb-dot" />
+                    <p className="thought-quote">"{currentDialogue.line}"</p>
                   </div>
                 )}
                 <div className="question-speech-bubble">
@@ -1651,27 +1410,56 @@ export default function App() {
                   </button>
                   <button
                     className="akinator-btn btn-probnot"
-                    onClick={() => setShowGameHistoryModal(true)}
+                    onClick={() => {
+                      setStatsInitialTab("history");
+                      setShowStatsModal(true);
+                    }}
                   >
-                    Game History
+                    Match History
                   </button>
                 </div>
               </div>
 
               {history.length > 0 && (
-                <div className="arena-result-pathway-card">
-                  <div className="trail-title">Key Deduction Pathway</div>
-                  <div className="trail-list">
-                    {history.map((h) => (
-                      <div key={h.step} className="trail-item">
-                        <span className="trail-step">#{h.step}</span>
-                        <span className="trail-q">{h.questionText}</span>
-                        <span className={`h-badge ${answerBadgeClass(h.answerValue)}`}>
-                          {answerLabel(h.answerValue)}
-                        </span>
+                <div className="pathway-accordion-wrap">
+                  <button
+                    className="pathway-toggle-btn"
+                    onClick={() => setShowPathway(!showPathway)}
+                    type="button"
+                  >
+                    <span>{showPathway ? "Hide Question Breakdown" : `View Question Breakdown (${history.length} Questions)`}</span>
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transform: showPathway ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform 0.15s ease"
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                  {showPathway && (
+                    <div className="arena-result-pathway-card">
+                      <div className="trail-list">
+                        {history.map((h) => (
+                          <div key={h.step} className="trail-item">
+                            <span className="trail-step">#{h.step}</span>
+                            <span className="trail-q">{h.questionText}</span>
+                            <span className={`h-badge ${answerBadgeClass(h.answerValue)}`}>
+                              {answerLabel(h.answerValue)}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1877,9 +1665,24 @@ export default function App() {
         prefillSubmit={leaderboardPrefill}
       />
 
-      <GameHistoryModal
-        isOpen={showGameHistoryModal}
-        onClose={() => setShowGameHistoryModal(false)}
+      <GameModesModal
+        isOpen={showGameModesModal}
+        onClose={() => setShowGameModesModal(false)}
+        dailyData={dailyData}
+        dailyResult={dailyResult}
+        dailyStreak={dailyStreak}
+        onPlayDaily={startDailyGame}
+        onStartTwoPlayer={() => setIsTwoPlayerMode(true)}
+        onStartQuiz={(dom) => {
+          setQuizDomain(dom);
+          setIsQuizMode(true);
+        }}
+        onStartReversal={(dom) => {
+          setReverseDomain(dom);
+          setIsReverseMode(true);
+        }}
+        onCreateChallenge={() => setShowChallengeModal(true)}
+        onPlayChallengeCode={(code) => handlePlayChallenge(code, "character", "Friend")}
       />
 
       {toastAchievement && (
