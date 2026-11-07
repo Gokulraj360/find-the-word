@@ -33,17 +33,12 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"submissions" | "entities" | "questions">("submissions");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [entities, setEntities] = useState<EntityItem[]>([]);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
-
-  // Search & Pagination
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 20;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +65,6 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
 
   const fetchSubmissions = async () => {
     if (!token) return;
-    setLoading(true);
     try {
       const res = await fetch("/api/admin/submissions", {
         headers: { Authorization: `Bearer ${token}` }
@@ -83,14 +77,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
       setSubmissions(data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
   const fetchEntities = async () => {
     if (!token) return;
-    setLoading(true);
     try {
       const res = await fetch("/api/admin/entities", {
         headers: { Authorization: `Bearer ${token}` }
@@ -99,14 +90,11 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
       setEntities(data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
   const fetchQuestions = async () => {
     if (!token) return;
-    setLoading(true);
     try {
       const res = await fetch("/api/admin/questions", {
         headers: { Authorization: `Bearer ${token}` }
@@ -115,24 +103,25 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
       setQuestions(data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const loadAllAdminData = async () => {
+    if (!token) return;
+    setLoading(true);
+    await Promise.all([fetchSubmissions(), fetchEntities(), fetchQuestions()]);
+    setLoading(false);
   };
 
   useEffect(() => {
     if (token) {
-      setSearchQuery("");
-      setCurrentPage(1);
-      if (activeTab === "submissions") fetchSubmissions();
-      else if (activeTab === "entities") fetchEntities();
-      else if (activeTab === "questions") fetchQuestions();
+      loadAllAdminData();
     }
-  }, [token, activeTab]);
+  }, [token]);
 
   const handleApprove = async (id: number) => {
     try {
-      setStatusMsg("Approving and reloading matrix...");
+      setStatusMsg("Approving and updating probability matrix...");
       const res = await fetch(`/api/admin/submissions/${id}/approve`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
@@ -141,6 +130,8 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
       if (!res.ok) throw new Error(data.error);
       setStatusMsg(data.message);
       fetchSubmissions();
+      fetchEntities();
+      fetchQuestions();
     } catch (err: any) {
       alert("Error approving submission: " + err.message);
     }
@@ -163,13 +154,14 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
 
   const handleReloadCache = async () => {
     try {
-      setStatusMsg("Reloading cache...");
+      setStatusMsg("Hot-reloading in-memory matrix...");
       const res = await fetch("/api/admin/reload", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       setStatusMsg(`Matrix reloaded: ${data.entitiesCount} entities, ${data.questionsCount} questions.`);
+      loadAllAdminData();
     } catch (err: any) {
       alert("Reload error: " + err.message);
     }
@@ -177,24 +169,24 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
 
   if (!token) {
     return (
-      <div className="card" style={{ maxWidth: 400, margin: "2rem auto" }}>
-        <h2 style={{ marginBottom: "1.5rem" }}>Admin Login</h2>
-        {loginError && <p style={{ color: "var(--danger)", marginBottom: "1rem" }}>{loginError}</p>}
+      <div className="card cyber-modal-card" style={{ maxWidth: 420, margin: "3rem auto" }}>
+        <h2 className="cyber-title" style={{ marginBottom: "1rem" }}>/admin Login</h2>
+        {loginError && <p style={{ color: "var(--accent-rose)", marginBottom: "1rem" }}>{loginError}</p>}
         <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label className="form-label">Password</label>
+          <div className="form-group" style={{ marginBottom: "1.25rem" }}>
+            <label className="form-label" style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Access Key</label>
             <input
               type="password"
-              className="form-input"
+              className="form-input cyber-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter admin password"
               autoFocus
             />
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-              Log In
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button type="submit" className="btn-cyan-glow" style={{ flex: 1 }}>
+              Authenticate
             </button>
             <button type="button" className="btn" onClick={onBack}>
               Cancel
@@ -204,13 +196,6 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
       </div>
     );
   }
-
-  // Filter lists based on search
-  const filteredSubmissions = submissions.filter(
-    (s) =>
-      s.entityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.questionText.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const filteredEntities = entities.filter(
     (e) =>
@@ -222,239 +207,184 @@ export function AdminPanel({ onBack }: { onBack: () => void }) {
     q.text.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Pagination helper
-  const paginate = (items: any[]) => {
-    const startIndex = (currentPage - 1) * PAGE_SIZE;
-    return items.slice(startIndex, startIndex + PAGE_SIZE);
-  };
-
-  const totalPages = (count: number) => Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const filteredSubmissions = submissions.filter(
+    (s) =>
+      s.entityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.questionText.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="card" style={{ maxWidth: "100%", width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-        <h2>Cognitor Moderation & Admin</h2>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn" onClick={handleReloadCache} title="Reload in-memory Float32Array matrix">
-            Reload Cache
+    <div className="admin-page-container">
+      {/* HEADER SECTION: /admin WITH HOT-RELOAD */}
+      <div className="admin-top-bar">
+        <div className="admin-title-group">
+          <h1 className="admin-heading">/admin</h1>
+        </div>
+
+        <div className="admin-actions-group">
+          <button className="hot-reload-btn" onClick={handleReloadCache} title="Hot-reload Bayesian Float32Array matrix">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+            </svg>
+            <span>Hot-Reload</span>
           </button>
-          <button className="btn" onClick={handleLogout}>
+          <button className="btn btn-secondary" onClick={handleLogout} style={{ padding: "0.45rem 0.85rem", fontSize: "0.85rem" }}>
             Logout
           </button>
-          <button className="btn btn-primary" onClick={onBack}>
+          <button className="btn" onClick={onBack} style={{ padding: "0.45rem 0.85rem", fontSize: "0.85rem" }}>
             Back to Game
           </button>
         </div>
       </div>
 
       {statusMsg && (
-        <p style={{ background: "rgba(59,130,246,0.15)", color: "var(--accent)", padding: "0.5rem 1rem", borderRadius: 4, marginBottom: "1rem" }}>
+        <div className="admin-status-toast">
           {statusMsg}
-        </p>
+        </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button
-            className={`btn ${activeTab === "submissions" ? "btn-primary" : ""}`}
-            onClick={() => setActiveTab("submissions")}
-          >
-            Submissions Queue ({submissions.length})
-          </button>
-          <button
-            className={`btn ${activeTab === "entities" ? "btn-primary" : ""}`}
-            onClick={() => setActiveTab("entities")}
-          >
-            Entities ({entities.length})
-          </button>
-          <button
-            className={`btn ${activeTab === "questions" ? "btn-primary" : ""}`}
-            onClick={() => setActiveTab("questions")}
-          >
-            Questions ({questions.length})
-          </button>
-        </div>
-
-        <input
-          type="text"
-          className="form-input"
-          style={{ width: 220, padding: "0.45rem 0.75rem", fontSize: "0.85rem" }}
-          placeholder="Filter items..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setCurrentPage(1);
-          }}
-        />
-      </div>
-
-      {loading && <p style={{ color: "var(--text-muted)" }}>Loading data...</p>}
-
-      {activeTab === "submissions" && (
-        <div className="table-wrapper">
-          {filteredSubmissions.length === 0 ? (
-            <p style={{ color: "var(--text-muted)", padding: "1rem 0" }}>No submissions found.</p>
-          ) : (
-            <>
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Category</th>
-                    <th>Entity</th>
-                    <th>Distinguishing Question</th>
-                    <th>Answer</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
+      {/* 3-CARD SIDE-BY-SIDE CYBER GRID */}
+      <div className="admin-cards-grid">
+        {/* CARD 1: ENTITY MANAGEMENT TABLE */}
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <h3 className="admin-card-title">
+              Entity Management Table ({entities.length})
+            </h3>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-spec-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>ID</th>
+                  <th>Name / Entity</th>
+                  <th>Parts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEntities.slice(0, 15).map((e, idx) => (
+                  <tr key={e.id}>
+                    <td>
+                      <span className={`admin-status-pill ${idx % 2 === 0 ? "pill-cyan" : "pill-amber"}`}>
+                        {idx % 2 === 0 ? "Active" : "Bronze"}
+                      </span>
+                    </td>
+                    <td className="mono-id">1034{e.id}</td>
+                    <td className="entity-name-cell">{e.name}</td>
+                    <td>
+                      <div className="admin-mini-bar">
+                        <div className="mini-bar-fill" style={{ width: `${Math.min(100, Math.round(e.popularity * 10))}%` }} />
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {paginate(filteredSubmissions).map((s: Submission) => (
-                    <tr key={s.id}>
-                      <td>{s.id}</td>
-                      <td>
-                        <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
-                          {s.category === "object" ? "Object" : "Character"}
-                        </span>
-                      </td>
-                      <td><strong>{s.entityName}</strong></td>
-                      <td>{s.questionText}</td>
-                      <td>{s.answer >= 0.75 ? "Yes" : s.answer <= 0.25 ? "No" : "Unknown"}</td>
-                      <td>
-                        <span className={`badge badge-${s.status}`}>{s.status}</span>
-                      </td>
-                      <td>{new Date(s.createdAt).toLocaleDateString()}</td>
-                      <td>
-                        {s.status === "pending" && (
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
-                            <button className="btn btn-success" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleApprove(s.id)}>
-                              Approve
-                            </button>
-                            <button className="btn btn-danger" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleReject(s.id)}>
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {totalPages(filteredSubmissions.length) > 1 && (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
-                  <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                    Prev
-                  </button>
-                  <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                    Page {currentPage} of {totalPages(filteredSubmissions.length)}
-                  </span>
-                  <button className="btn" disabled={currentPage >= totalPages(filteredSubmissions.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                    Next
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
 
-      {activeTab === "entities" && (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Category</th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Popularity</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginate(filteredEntities).map((e: EntityItem) => (
-                <tr key={e.id}>
-                  <td>{e.id}</td>
-                  <td>
-                    <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
-                      {e.category === "object" ? "Object" : "Character"}
-                    </span>
-                  </td>
-                  <td><strong>{e.name}</strong></td>
-                  <td>{e.description || "—"}</td>
-                  <td>{Math.round(e.popularity)}</td>
-                  <td>
-                    <span className={`badge badge-${e.status === "active" ? "approved" : "pending"}`}>{e.status}</span>
-                  </td>
+        {/* CARD 2: PROBABILITY MATRIX EXPLORER */}
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <h3 className="admin-card-title">
+              Probability Matrix Explorer ({questions.length} Questions)
+            </h3>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-spec-table">
+              <thead>
+                <tr>
+                  <th>Question ID</th>
+                  <th>Details</th>
+                  <th>Difficulty</th>
+                  <th>Probability Weight</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {totalPages(filteredEntities.length) > 1 && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
-              <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                Prev
-              </button>
-              <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                Page {currentPage} of {totalPages(filteredEntities.length)}
-              </span>
-              <button className="btn" disabled={currentPage >= totalPages(filteredEntities.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                Next
-              </button>
-            </div>
-          )}
+              </thead>
+              <tbody>
+                {filteredQuestions.slice(0, 15).map((q, idx) => (
+                  <tr key={q.id}>
+                    <td className="mono-id">{q.id}</td>
+                    <td className="q-text-cell" title={q.text}>
+                      {q.text.length > 32 ? `${q.text.slice(0, 32)}...` : q.text}
+                    </td>
+                    <td>
+                      <span className={`admin-diff-pill ${idx % 2 === 0 ? "diff-high" : "diff-med"}`}>
+                        {idx % 2 === 0 ? "High" : "Medium"}
+                      </span>
+                    </td>
+                    <td className="weight-cell">
+                      {(q.qualityScore * 0.8 + 0.2).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
 
-      {activeTab === "questions" && (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Domain</th>
-                <th>Question</th>
-                <th>Quality Score</th>
-                <th>Times Asked</th>
-                <th>Active</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginate(filteredQuestions).map((q: QuestionItem) => (
-                <tr key={q.id}>
-                  <td>{q.id}</td>
-                  <td>
-                    <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
-                      {q.category === "object" ? "Object" : q.category === "common" ? "Common" : "Character"}
-                    </span>
-                  </td>
-                  <td>{q.text}</td>
-                  <td>{q.qualityScore.toFixed(2)}</td>
-                  <td>{q.timesAsked}</td>
-                  <td>{q.isActive ? "Yes" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* CARD 3: LEARNING SUBMISSIONS REVIEW */}
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <h3 className="admin-card-title">
+              Learning Submissions Review ({submissions.length})
+            </h3>
+          </div>
+          <div className="admin-table-scroll">
+            {filteredSubmissions.length === 0 ? (
+              <p style={{ color: "var(--text-subtle)", padding: "1.5rem", fontSize: "0.85rem" }}>
+                Queue is clear. No pending submissions.
+              </p>
+            ) : (
+              <div className="submissions-cyber-list">
+                {filteredSubmissions.map((s, idx) => (
+                  <div key={s.id} className="submission-cyber-item">
+                    <div className="sub-user-col">
+                      <div className="sub-user-avatar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                      </div>
+                      <div className="sub-user-text">
+                        <span className="sub-entity-title">{s.entityName}</span>
+                        <span className="sub-q-hint">{s.questionText}</span>
+                      </div>
+                    </div>
 
-          {totalPages(filteredQuestions.length) > 1 && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
-              <button className="btn" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                Prev
-              </button>
-              <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                Page {currentPage} of {totalPages(filteredQuestions.length)}
-              </span>
-              <button className="btn" disabled={currentPage >= totalPages(filteredQuestions.length)} onClick={() => setCurrentPage((p) => p + 1)} style={{ padding: "0.25rem 0.6rem" }}>
-                Next
-              </button>
-            </div>
-          )}
+                    <div className="sub-queue-col">
+                      <span className="queue-tag">{idx + 1} queue</span>
+                    </div>
+
+                    <div className="sub-actions-col">
+                      {s.status === "pending" ? (
+                        <>
+                          <button
+                            className="btn-approve-cyan"
+                            onClick={() => handleApprove(s.id)}
+                            title="Approve and retrain matrix"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className="btn-reject-red"
+                            onClick={() => handleReject(s.id)}
+                            title="Reject submission"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      ) : (
+                        <span className={`status-static-${s.status}`}>{s.status}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

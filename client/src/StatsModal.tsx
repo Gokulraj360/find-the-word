@@ -9,6 +9,7 @@ import {
   formatGameDate,
   MAX_HISTORY_ENTRIES
 } from "./gameHistory.js";
+import { HexBadge, BadgeType } from "./HexBadge.js";
 
 interface StatsModalProps {
   isOpen: boolean;
@@ -18,6 +19,17 @@ interface StatsModalProps {
   initialTab?: "stats" | "achievements" | "history";
 }
 
+const HEX_BADGES_LIST: { id: string; type: BadgeType; label: string }[] = [
+  { id: "first_win", type: "novice_seeker", label: "Novice Seeker" },
+  { id: "streak_5", type: "deduction_master", label: "Deduction Master" },
+  { id: "speed_under_8", type: "speed_demon", label: "Speed Demon" },
+  { id: "stumped_3", type: "stump_champion", label: "Stump Champion" },
+  { id: "dual_scholar", type: "polymath", label: "Polymath" },
+  { id: "games_10", type: "trivia_ace", label: "Trivia Ace" },
+  { id: "expert_win", type: "duelist", label: "Duelist" },
+  { id: "streak_10", type: "unstoppable", label: "Unstoppable" }
+];
+
 export function StatsModal({
   isOpen,
   onClose,
@@ -26,6 +38,7 @@ export function StatsModal({
   initialTab = "stats"
 }: StatsModalProps) {
   const [activeTab, setActiveTab] = useState<"stats" | "achievements" | "history">(initialTab);
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string>("first_win");
   const [confirmReset, setConfirmReset] = useState(false);
   const [history, setHistory] = useState<GameHistoryEntry[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -88,10 +101,12 @@ export function StatsModal({
     return "h-badge-dontknow";
   };
 
+  const selectedAch = achievements.find((a) => a.id === selectedBadgeId) || achievements[0];
+
   return (
     <div className="stats-modal-backdrop" onClick={onClose}>
       <div
-        className="stats-modal-card"
+        className="stats-modal-card cyber-modal-card"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -99,9 +114,9 @@ export function StatsModal({
       >
         <div className="stats-modal-header">
           <div className="stats-modal-title-group">
-            <span className="stats-modal-eyebrow">Player Profile</span>
-            <h2 id="stats-modal-title" className="stats-modal-title">
-              Stats & History
+            <span className="stats-modal-eyebrow">Cognitor Dossier</span>
+            <h2 id="stats-modal-title" className="stats-modal-title cyber-title">
+              Player Stats
             </h2>
           </div>
           <button
@@ -196,52 +211,54 @@ export function StatsModal({
           </div>
         )}
 
-        {/* TAB 2: ACHIEVEMENTS */}
+        {/* TAB 2: ACHIEVEMENTS / 4x2 HEXAGONAL BADGES GRID */}
         {activeTab === "achievements" && (
-          <div className="achievements-list">
-            {achievements.map((ach) => (
-              <div
-                key={ach.id}
-                className={`achievement-card ${ach.unlocked ? "ach-unlocked" : "ach-locked"}`}
-              >
-                <div className="ach-icon-wrapper">
-                  {ach.unlocked ? (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                    </svg>
+          <div className="hex-achievements-container">
+            <div className="hex-badges-grid">
+              {HEX_BADGES_LIST.map((item) => {
+                const ach = achievements.find((a) => a.id === item.id);
+                const isUnlocked = Boolean(ach?.unlocked);
+                const progressText = ach ? `${ach.currentProgress}/${ach.maxProgress}` : "";
+
+                return (
+                  <HexBadge
+                    key={item.id}
+                    type={item.type}
+                    title={item.label}
+                    unlocked={isUnlocked}
+                    progressText={progressText}
+                    onClick={() => setSelectedBadgeId(item.id)}
+                  />
+                );
+              })}
+            </div>
+
+            {selectedAch && (
+              <div className="hex-selected-detail-card">
+                <div className="selected-detail-header">
+                  <span className="selected-detail-title">{selectedAch.title}</span>
+                  {selectedAch.unlocked ? (
+                    <span className="selected-detail-tag tag-unlocked">Unlocked</span>
                   ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                    </svg>
+                    <span className="selected-detail-tag tag-locked">Locked</span>
                   )}
                 </div>
-
-                <div className="ach-body">
-                  <div className="ach-title-row">
-                    <span className="ach-title">{ach.title}</span>
-                    {ach.unlocked && (
-                      <span className="ach-unlocked-tag">Unlocked</span>
-                    )}
+                <p className="selected-detail-desc">{selectedAch.description}</p>
+                <div className="ach-progress-container">
+                  <div className="ach-progress-track">
+                    <div
+                      className="ach-progress-bar"
+                      style={{
+                        width: `${Math.min(100, Math.round((selectedAch.currentProgress / selectedAch.maxProgress) * 100))}%`
+                      }}
+                    />
                   </div>
-                  <p className="ach-desc">{ach.description}</p>
-
-                  <div className="ach-progress-container">
-                    <div className="ach-progress-track">
-                      <div
-                        className="ach-progress-bar"
-                        style={{
-                          width: `${Math.min(100, Math.round((ach.currentProgress / ach.maxProgress) * 100))}%`
-                        }}
-                      />
-                    </div>
-                    <span className="ach-progress-text">
-                      {ach.currentProgress} / {ach.maxProgress}
-                    </span>
-                  </div>
+                  <span className="ach-progress-text">
+                    {selectedAch.currentProgress} / {selectedAch.maxProgress}
+                  </span>
                 </div>
               </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -270,92 +287,91 @@ export function StatsModal({
                     <polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
                 </div>
-                <p className="history-empty-title">No Games Recorded Yet</p>
-                <p className="history-empty-sub">
-                  Play a game of 20 Questions to record your deductions, questions asked, and win records.
+                <p className="history-empty-title">No matches recorded yet</p>
+                <p className="history-empty-hint">
+                  Complete a deduction session to build your personal dossier.
                 </p>
               </div>
             ) : (
-              <div className="history-items-list">
+              <div className="history-list">
                 {history.map((entry) => {
                   const isExpanded = expandedId === entry.id;
-                  const isCognitorWin = entry.result === "won";
-
+                  const isWon = entry.result === "won";
+                  const questionList = entry.questions || [];
                   return (
                     <div
                       key={entry.id}
-                      className={`history-card-item ${isCognitorWin ? "history-item-win" : "history-item-stumped"}`}
+                      className={`history-item-card ${isWon ? "history-won" : "history-lost"} ${isExpanded ? "history-expanded" : ""}`}
                     >
-                      <div className="history-item-main" onClick={() => toggleExpand(entry.id)}>
-                        <div className="history-item-left">
-                          <span
-                            className={`history-result-pill ${
-                              isCognitorWin ? "result-pill-win" : "result-pill-stumped"
-                            }`}
-                          >
-                            {isCognitorWin ? "Cognitor Won" : "Stumped"}
+                      <div
+                        className="history-summary-row"
+                        onClick={() => toggleExpand(entry.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
+                      >
+                        <div className="history-outcome-pill">
+                          <span className={`outcome-dot ${isWon ? "dot-won" : "dot-lost"}`} />
+                          <span className="outcome-text">
+                            {isWon ? "Cognitor Won" : "You Stumped Cognitor"}
                           </span>
-                          <div className="history-item-titles">
-                            <h4 className="history-entity-name">{entry.entityName}</h4>
-                            <div className="history-meta-row">
-                              <span className="history-meta-tag">
-                                {entry.domain === "character" ? "Character" : "Object"}
-                              </span>
-                              <span className="history-meta-date" title={formatGameDate(entry.timestamp)}>
-                                {formatRelativeTime(entry.timestamp)}
-                              </span>
-                            </div>
-                          </div>
                         </div>
 
-                        <div className="history-item-right">
-                          <span className="history-q-count">
-                            {entry.questionsCount} Qs
+                        <div className="history-entity-info">
+                          <span className="history-entity-name" title={entry.entityName}>
+                            {entry.entityName}
                           </span>
-                          <button
-                            className="history-expand-btn"
-                            aria-label={isExpanded ? "Collapse questions" : "Expand questions"}
+                          <span className="history-meta-sub">
+                            {entry.domain === "object" ? "Object" : "Character"} · {entry.difficulty} mode
+                          </span>
+                        </div>
+
+                        <div className="history-step-count">
+                          <span className="step-num">{entry.questionsCount}</span>
+                          <span className="step-label">Qs</span>
+                        </div>
+
+                        <div className="history-time-col">
+                          <span className="history-rel-time">{formatRelativeTime(entry.timestamp)}</span>
+                          <span className="history-abs-time">{formatGameDate(entry.timestamp)}</span>
+                        </div>
+
+                        <div className="history-chevron">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{
+                              transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                              transition: "transform 0.15s ease"
+                            }}
                           >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              style={{
-                                transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
-                                transition: "transform 0.15s ease"
-                              }}
-                            >
-                              <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                          </button>
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
                         </div>
                       </div>
 
                       {isExpanded && (
-                        <div className="history-expanded-tray">
-                          <div className="history-tray-header">
-                            <span>Question Breakdown ({entry.questions.length} questions)</span>
+                        <div className="history-expanded-content">
+                          <div className="history-pathway-header">
+                            <span>Question Pathway ({questionList.length} Steps)</span>
                           </div>
-                          {entry.questions && entry.questions.length > 0 ? (
-                            <div className="history-tray-rows">
-                              {entry.questions.map((q) => (
-                                <div key={q.step} className="history-tray-row">
-                                  <span className="h-step-pill">Q{q.step}</span>
-                                  <span className="history-tray-q-text">{q.text}</span>
-                                  <span className={`h-badge ${getAnswerBadgeClass(q.answerValue)}`}>
-                                    {q.answerLabel}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="history-tray-empty">No detailed question log stored for this game.</p>
-                          )}
+                          <div className="history-pathway-list">
+                            {questionList.map((p) => (
+                              <div key={p.step} className="history-pathway-item">
+                                <span className="pathway-step-idx">#{p.step}</span>
+                                <span className="pathway-q-text">{p.text}</span>
+                                <span className={`h-badge ${getAnswerBadgeClass(p.answerValue)}`}>
+                                  {p.answerLabel}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -366,19 +382,17 @@ export function StatsModal({
           </div>
         )}
 
-        {/* FOOTER */}
         <div className="stats-modal-footer">
           {activeTab === "stats" && (
             <button
               className={`stats-reset-btn ${confirmReset ? "stats-reset-btn-confirm" : ""}`}
               onClick={handleResetClick}
-              title="Reset all streak counters and games played"
             >
-              {confirmReset ? "Confirm Reset All Stats?" : "Reset Stats"}
+              {confirmReset ? "Confirm Reset All Data?" : "Reset Lifetime Stats"}
             </button>
           )}
-          <button className="btn btn-secondary stats-done-btn" onClick={onClose}>
-            Done
+          <button className="game-btn game-btn-secondary" onClick={onClose} style={{ marginLeft: "auto" }}>
+            Close
           </button>
         </div>
       </div>

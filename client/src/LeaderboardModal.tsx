@@ -25,6 +25,7 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
   const [activeCategory, setActiveCategory] = useState<LeaderboardCategory>(
     prefillSubmit ? prefillSubmit.category : "fastest_guess"
   );
+  const [metalTier, setMetalTier] = useState<"all" | "gold" | "silver" | "bronze">("all");
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
       }
       setPlayerName(getSavedPlayerName());
       setSubmitSuccess(null);
+      setMetalTier("all");
     }
   }, [isOpen, prefillSubmit, loadData, activeCategory]);
 
@@ -76,6 +78,7 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
 
   const handleTabChange = (cat: LeaderboardCategory) => {
     setActiveCategory(cat);
+    setMetalTier("all");
     loadData(cat);
   };
 
@@ -101,28 +104,24 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
         difficulty: pendingScore.difficulty
       });
       setSavedPlayerName(trimmed);
-      setSubmitSuccess(`Your score of ${pendingScore.score} has been submitted!`);
+      setSubmitSuccess("Record submitted to global leaderboard.");
       setPendingScore(null);
-      await loadData(activeCategory);
+      loadData(activeCategory);
     } catch (err: any) {
-      setError(err.message || "Submission failed.");
+      setError(err.message || "Failed to submit record.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const entries = data?.entries || [];
-  const topThree = entries.slice(0, 3);
-  const remaining = entries.slice(3);
-
   const formatScore = (cat: LeaderboardCategory, score: number) => {
-    if (cat === "fastest_guess" || cat === "daily") {
-      return `${score} questions`;
+    if (cat === "fastest_guess") {
+      return `${score} Qs`;
     }
     if (cat === "best_streak") {
       return `${score} streak`;
     }
-    return `${score} questions`;
+    return `${score} Qs`;
   };
 
   const formatDate = (iso: string) => {
@@ -137,10 +136,19 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
     }
   };
 
+  const allEntries = data?.entries || [];
+  const filteredEntries = metalTier === "gold"
+    ? allEntries.slice(0, 1)
+    : metalTier === "silver"
+    ? allEntries.slice(1, 2)
+    : metalTier === "bronze"
+    ? allEntries.slice(2, 3)
+    : allEntries;
+
   return (
     <div className="stats-modal-backdrop" onClick={onClose}>
       <div
-        className="stats-modal-card leaderboard-modal-card"
+        className="stats-modal-card leaderboard-modal-card cyber-modal-card"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -148,66 +156,120 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
       >
         <div className="stats-modal-header">
           <div>
-            <h2 id="leaderboard-modal-title" className="stats-modal-title">
-              Cognitor Global Leaderboard
+            <h2 id="leaderboard-modal-title" className="stats-modal-title cyber-title">
+              Global Leaderboard
             </h2>
             <p className="stats-modal-subtitle">
-              Top records and achievements across the player community
+              Top deduction records across the Cognitor network
             </p>
           </div>
           <button
             type="button"
-            className="stats-modal-close"
+            className="stats-modal-close-btn"
             onClick={onClose}
             aria-label="Close leaderboard"
           >
-            x
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
           </button>
         </div>
 
-        {/* Global Summary Stats */}
-        {data?.summary && (
-          <div className="leaderboard-summary-strip">
-            <div className="leaderboard-summary-box">
-              <span className="summary-box-label">Fastest Guess Record</span>
-              <span className="summary-box-val">
-                {data.summary.bestFastestGuess !== null
-                  ? `${data.summary.bestFastestGuess} questions`
-                  : "--"}
-              </span>
+        {/* METALLIC PODIUM TABS (GOLD / SILVER / BRONZE) */}
+        <div className="leaderboard-metallic-tabs">
+          <button
+            type="button"
+            className={`metal-tab-btn metal-tab-gold ${metalTier === "gold" ? "metal-active" : ""}`}
+            onClick={() => setMetalTier(metalTier === "gold" ? "all" : "gold")}
+          >
+            <div className="metal-tab-icon gold-glow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="6"></circle>
+                <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+              </svg>
             </div>
-            <div className="leaderboard-summary-box">
-              <span className="summary-box-label">Longest Streak</span>
-              <span className="summary-box-val">
-                {data.summary.highestStreak !== null
-                  ? `${data.summary.highestStreak} wins`
-                  : "--"}
-              </span>
+            <span>Gold</span>
+          </button>
+
+          <button
+            type="button"
+            className={`metal-tab-btn metal-tab-silver ${metalTier === "silver" ? "metal-active" : ""}`}
+            onClick={() => setMetalTier(metalTier === "silver" ? "all" : "silver")}
+          >
+            <div className="metal-tab-icon silver-glow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="6"></circle>
+                <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+              </svg>
             </div>
-            <div className="leaderboard-summary-box">
-              <span className="summary-box-label">Total Submissions</span>
-              <span className="summary-box-val">{data.summary.totalSubmissions}</span>
+            <span>Silver</span>
+          </button>
+
+          <button
+            type="button"
+            className={`metal-tab-btn metal-tab-bronze ${metalTier === "bronze" ? "metal-active" : ""}`}
+            onClick={() => setMetalTier(metalTier === "bronze" ? "all" : "bronze")}
+          >
+            <div className="metal-tab-icon bronze-glow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="6"></circle>
+                <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+              </svg>
             </div>
-          </div>
-        )}
+            <span>Bronze</span>
+          </button>
+        </div>
+
+        {/* CATEGORY SELECTOR SUB-BAR */}
+        <div className="stats-tab-bar leaderboard-tabs" style={{ marginTop: "0.75rem", marginBottom: "1rem" }}>
+          <button
+            type="button"
+            className={`stats-tab-btn ${activeCategory === "fastest_guess" ? "stats-tab-active" : ""}`}
+            onClick={() => handleTabChange("fastest_guess")}
+          >
+            Fastest Guesses
+          </button>
+          <button
+            type="button"
+            className={`stats-tab-btn ${activeCategory === "best_streak" ? "stats-tab-active" : ""}`}
+            onClick={() => handleTabChange("best_streak")}
+          >
+            Best Streaks
+          </button>
+          <button
+            type="button"
+            className={`stats-tab-btn ${activeCategory === "stumped" ? "stats-tab-active" : ""}`}
+            onClick={() => handleTabChange("stumped")}
+          >
+            Stumped Cognitor
+          </button>
+          <button
+            type="button"
+            className={`stats-tab-btn ${activeCategory === "daily" ? "stats-tab-active" : ""}`}
+            onClick={() => handleTabChange("daily")}
+          >
+            Daily Challenge
+          </button>
+        </div>
 
         {/* Optional Pending Submission Card */}
         {pendingScore && (
           <div className="leaderboard-submit-banner">
             <div className="submit-banner-header">
               <span className="submit-banner-title">
-                Submit Your Recent Record ({pendingScore.category.replace("_", " ").toUpperCase()})
+                Submit Record ({pendingScore.category.replace("_", " ")})
               </span>
               <span className="submit-banner-pill">
                 Score: {formatScore(pendingScore.category, pendingScore.score)}
-                {pendingScore.entityName ? ` | ${pendingScore.entityName}` : ""}
+                {pendingScore.entityName ? ` · ${pendingScore.entityName}` : ""}
               </span>
             </div>
             <form onSubmit={handleSubmitScore} className="submit-banner-form">
               <input
                 type="text"
-                className="submit-banner-input"
-                placeholder="Enter your nickname..."
+                className="submit-banner-input cyber-input"
+                placeholder="Enter player nickname..."
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
                 maxLength={30}
@@ -215,7 +277,7 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
               />
               <button
                 type="submit"
-                className="game-btn game-btn-primary submit-banner-btn"
+                className="btn-cyan-glow"
                 disabled={submitting}
               >
                 {submitting ? "Submitting..." : "Submit Score"}
@@ -229,129 +291,80 @@ export function LeaderboardModal({ isOpen, onClose, prefillSubmit }: Leaderboard
         )}
         {error && <div className="leaderboard-alert-error">{error}</div>}
 
-        {/* Category Tabs */}
-        <div className="stats-tab-bar leaderboard-tabs">
-          <button
-            type="button"
-            className={`stats-tab-btn ${activeCategory === "fastest_guess" ? "active" : ""}`}
-            onClick={() => handleTabChange("fastest_guess")}
-          >
-            Fastest Guesses
-          </button>
-          <button
-            type="button"
-            className={`stats-tab-btn ${activeCategory === "best_streak" ? "active" : ""}`}
-            onClick={() => handleTabChange("best_streak")}
-          >
-            Best Streaks
-          </button>
-          <button
-            type="button"
-            className={`stats-tab-btn ${activeCategory === "stumped" ? "active" : ""}`}
-            onClick={() => handleTabChange("stumped")}
-          >
-            Stumped Cognitor
-          </button>
-          <button
-            type="button"
-            className={`stats-tab-btn ${activeCategory === "daily" ? "active" : ""}`}
-            onClick={() => handleTabChange("daily")}
-          >
-            Daily Challenge
-          </button>
-        </div>
-
-        {/* Body / Rankings */}
+        {/* Body / Rankings List */}
         <div className="leaderboard-body">
           {loading ? (
             <div className="leaderboard-status-msg">Loading records...</div>
-          ) : entries.length === 0 ? (
+          ) : filteredEntries.length === 0 ? (
             <div className="leaderboard-status-msg">
-              No entries found yet for this category. Be the first to submit a score!
+              No entries found yet for this category.
             </div>
           ) : (
-            <>
-              {/* Podium for top 3 */}
-              {topThree.length > 0 && (
-                <div className="leaderboard-podium">
-                  {topThree.map((entry, index) => {
-                    const rank = index + 1;
-                    const rankClass =
-                      rank === 1 ? "podium-gold" : rank === 2 ? "podium-silver" : "podium-bronze";
-                    const medalLabel = rank === 1 ? "1st" : rank === 2 ? "2nd" : "3rd";
-                    return (
-                      <div key={entry.id} className={`podium-card ${rankClass}`}>
-                        <div className="podium-badge">{medalLabel}</div>
-                        <div className="podium-name" title={entry.playerName}>
-                          {entry.playerName}
+            <div className="leaderboard-cyber-list">
+              {filteredEntries.map((entry, index) => {
+                const rank = metalTier === "gold" ? 1 : metalTier === "silver" ? 2 : metalTier === "bronze" ? 3 : index + 1;
+                const isGold = rank === 1;
+                const isSilver = rank === 2;
+                const isBronze = rank === 3;
+
+                return (
+                  <div
+                    key={entry.id}
+                    className={`leaderboard-cyber-row ${isGold ? "row-gold" : isSilver ? "row-silver" : isBronze ? "row-bronze" : ""}`}
+                  >
+                    <div className="cyber-rank-col">
+                      {isGold ? (
+                        <div className="rank-medal-badge badge-gold">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="8" r="6"></circle>
+                            <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+                          </svg>
                         </div>
-                        <div className="podium-score">
-                          {formatScore(entry.category, entry.score)}
+                      ) : isSilver ? (
+                        <div className="rank-medal-badge badge-silver">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="8" r="6"></circle>
+                            <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+                          </svg>
                         </div>
-                        {entry.entityName && (
-                          <div className="podium-entity" title={entry.entityName}>
-                            {entry.entityName}
-                          </div>
-                        )}
-                        <div className="podium-meta">
-                          {entry.difficulty && (
-                            <span className="podium-difficulty">{entry.difficulty}</span>
-                          )}
-                          <span className="podium-date">{formatDate(entry.date)}</span>
+                      ) : isBronze ? (
+                        <div className="rank-medal-badge badge-bronze">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="8" r="6"></circle>
+                            <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+                          </svg>
                         </div>
+                      ) : (
+                        <span className="rank-plain-num">#{rank}</span>
+                      )}
+                    </div>
+
+                    <div className="cyber-player-col">
+                      <div className="cyber-user-avatar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="cyber-player-info">
+                        <span className="cyber-player-name">{entry.playerName}</span>
+                        {entry.entityName && (
+                          <span className="cyber-player-item">{entry.entityName}</span>
+                        )}
+                      </div>
+                    </div>
 
-              {/* Ranks 4+ Table */}
-              {remaining.length > 0 && (
-                <div className="leaderboard-table-container">
-                  <table className="leaderboard-table">
-                    <thead>
-                      <tr>
-                        <th>Rank</th>
-                        <th>Player</th>
-                        <th>Score</th>
-                        <th>Item</th>
-                        <th>Difficulty</th>
-                        <th>Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {remaining.map((entry, idx) => (
-                        <tr key={entry.id}>
-                          <td className="rank-cell">#{idx + 4}</td>
-                          <td className="player-cell">{entry.playerName}</td>
-                          <td className="score-cell">
-                            {formatScore(entry.category, entry.score)}
-                          </td>
-                          <td className="entity-cell">{entry.entityName || "--"}</td>
-                          <td className="diff-cell">
-                            {entry.difficulty ? (
-                              <span className={`diff-tag diff-${entry.difficulty}`}>
-                                {entry.difficulty}
-                              </span>
-                            ) : (
-                              "--"
-                            )}
-                          </td>
-                          <td className="date-cell">{formatDate(entry.date)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
+                    <div className="cyber-score-col">
+                      <span className="cyber-score-val">
+                        {formatScore(entry.category, entry.score)}
+                      </span>
+                      <span className="cyber-score-date">{formatDate(entry.date)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </div>
-
-        <div className="stats-modal-footer">
-          <button type="button" className="game-btn game-btn-secondary" onClick={onClose}>
-            Close
-          </button>
         </div>
       </div>
     </div>

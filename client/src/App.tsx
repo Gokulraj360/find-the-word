@@ -41,6 +41,8 @@ import { CognitorDialogue, getCognitorDialogue } from "./personality.js";
 import { triggerConfetti } from "./confetti.js";
 import { saveGameHistoryEntry } from "./gameHistory.js";
 import { GameModesModal } from "./GameModesModal.js";
+import { CyberAvatar } from "./CyberAvatar.js";
+import { DeductionPathwayGraph } from "./DeductionPathwayGraph.js";
 import {
   ChallengeData,
   fetchChallengeDetails,
@@ -187,6 +189,7 @@ export default function App() {
   const [learnQuestion, setLearnQuestion] = useState("");
   const [learnAnswer, setLearnAnswer] = useState<number>(1.0);
   const [learnSubmitted, setLearnSubmitted] = useState(false);
+  const [agreeLearnTerms, setAgreeLearnTerms] = useState(true);
 
   // Load stats
   const fetchStats = async () => {
@@ -1191,235 +1194,209 @@ export default function App() {
           )}
 
           {/* ============================================================ */}
-          {/* THE DEDUCTION CARD ("I THINK OF...") */}
+          {/* THE DEDUCTION CARD ("I THINK OF...") - CYBER AESTHETIC */}
           {/* ============================================================ */}
           {gameState === "guess_pending" && guess && (
-            <div className="arena-deduction-card">
-              <div className="deduction-header">
-                <span className="deduction-eyebrow">My Deduction</span>
-                <h2 className="deduction-reveal-text">I think of...</h2>
-                {currentDialogue && (
-                  <p className="deduction-cognitor-quote">"{currentDialogue.line}"</p>
-                )}
-              </div>
+            <div className="deduction-screen-wrapper">
+              <h2 className="deduction-outer-title">I think of...</h2>
 
-              <div className="deduction-portrait-wrapper">
-                {proxiedImageUrl && !imageFailed ? (
-                  <img
-                    src={proxiedImageUrl}
-                    alt={guess.name}
-                    className="deduction-portrait-image"
-                    referrerPolicy="no-referrer"
-                    onError={() => {
-                      setImageFailed(true);
-                      if (!fallbackImage) {
-                        resolveEntityImage(guess.name);
-                      }
-                    }}
+              <div className="arena-deduction-card cyber-glowing-card">
+                <div className="deduction-header">
+                  <h3 className="deduction-inner-heading">My Deduction</h3>
+                  <p className="deduction-cognitor-quote">
+                    "{currentDialogue ? currentDialogue.line : "All clues point toward one undeniable conclusion."}"
+                  </p>
+                </div>
+
+                <div className="deduction-portrait-wrapper">
+                  <CyberAvatar
+                    size={115}
+                    imageUrl={!imageFailed ? proxiedImageUrl : null}
+                    name={guess.name}
+                    ringGlow={true}
                   />
-                ) : (
-                  <div className="deduction-portrait-monogram">
-                    <span>{guess.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+                </div>
 
-              <h3 className="deduction-entity-name">{guess.name}</h3>
-              {guess.description && (
-                <p className="deduction-entity-desc">{guess.description}</p>
-              )}
+                <div className="deduction-caption-block">
+                  <h4 className="deduction-entity-name">{guess.name}</h4>
+                  <p className="deduction-entity-desc">
+                    {guess.description || `"All clues point toward one undeniable conclusion."`}
+                  </p>
+                </div>
 
-              <p className="deduction-confirm-prompt">
-                Is this who or what you were thinking of?
-              </p>
-
-              <div className="deduction-button-row">
-                <button
-                  className="akinator-confirm-btn confirm-yes"
-                  onClick={() => confirmGuess(true)}
-                  disabled={loading}
-                >
-                  <span>Yes, that's it!</span>
-                </button>
-                <button
-                  className="akinator-confirm-btn confirm-no"
-                  onClick={() => confirmGuess(false)}
-                  disabled={loading}
-                >
-                  <span>No</span>
-                </button>
+                <div className="deduction-button-row">
+                  <button
+                    className="deduction-btn-confirm-yes"
+                    onClick={() => confirmGuess(true)}
+                    disabled={loading}
+                  >
+                    <span>Yes, that's it!</span>
+                  </button>
+                  <button
+                    className="deduction-btn-confirm-no"
+                    onClick={() => confirmGuess(false)}
+                    disabled={loading}
+                  >
+                    <span>No</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* ============================================================ */}
-          {/* WON SCREEN (CONFIRMED DEDUCTION) */}
+          {/* WON SCREEN (CONFIRMED DEDUCTION) - MATCHING DESIGN SPEC */}
           {/* ============================================================ */}
           {gameState === "won" && (
-            <div className="arena-result-grid">
-              <div className="arena-result-summary-card">
-                <span className="result-trophy-tag">Deduction Confirmed</span>
-                <h2 className="result-title">Mind Read Successfully</h2>
-                <p className="result-detail">
-                  I correctly deduced your thought in {currentQuestion ? currentQuestion.step : "a few"} questions ({difficulty} mode{selectedPack !== "all" ? ` · ${availablePacks.find((p) => p.id === selectedPack)?.title}` : ""}).
+            <div className="arena-result-grid spec-result-card">
+              <div className="deduction-confirmed-header">
+                <h2 className="confirmed-main-title">Deduction Confirmed</h2>
+                <p className="confirmed-sub-title">
+                  - Mind Read Successfully in {currentQuestion ? currentQuestion.step : history.length} Questions
                 </p>
+              </div>
 
-                <div className="player-stats-banner">
-                  <div className="stat-pill">
-                    <span className="stat-pill-label">Streak</span>
-                    <span className="stat-pill-val">{userStats.currentStreak} in a row</span>
-                  </div>
-                  <div className="stat-pill">
-                    <span className="stat-pill-label">Fastest Guess</span>
-                    <span className="stat-pill-val">
-                      {userStats.fastestGuess !== null ? `${userStats.fastestGuess} Qs` : "-"}
-                    </span>
-                    {lastResultOutcome?.isNewBest && (
-                      <span className="stat-pill-tag">New Record!</span>
-                    )}
-                  </div>
-                  <div className="stat-pill">
-                    <span className="stat-pill-label">Accuracy</span>
-                    <span className="stat-pill-val">{calculateWinRate(userStats)}%</span>
-                  </div>
-                </div>
-
-                {latestUnlockedBadges.length > 0 && (
-                  <div
-                    className="new-achievements-shelf"
-                    onClick={() => {
-                      setStatsInitialTab("achievements");
-                      setShowStatsModal(true);
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <span className="shelf-title">Badge Unlocked!</span>
-                    <div className="shelf-badge-list">
-                      {latestUnlockedBadges.map((b) => (
-                        <span key={b.id} className="shelf-badge-item">
-                          {b.title}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {isDailyMode && dailyResult && (
-                  <div className="daily-challenge-card" style={{ margin: "1rem 0" }}>
-                    <div className="daily-header-row">
-                      <span className="daily-eyebrow">Daily Challenge #{dailyResult.dayNumber} Result</span>
-                      {dailyStreak.currentStreak > 0 && (
-                        <span className="daily-streak-badge">{dailyStreak.currentStreak} Day Streak</span>
-                      )}
-                    </div>
-                    <p className="daily-target-desc">
-                      Cognitor deduced {dailyResult.targetName} in {dailyResult.questionsCount} questions!
-                    </p>
-                    <button className="daily-share-btn" onClick={handleShareDaily}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="18" cy="5" r="3"></circle>
-                        <circle cx="6" cy="12" r="3"></circle>
-                        <circle cx="18" cy="19" r="3"></circle>
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                      </svg>
-                      <span>{copiedShare ? "Copied to Clipboard!" : "Share Daily Result"}</span>
-                    </button>
-                    {dailyData?.entity.funFact && (
-                      <p className="daily-fun-fact-text">
-                        <strong>Did you know?</strong> {dailyData.entity.funFact}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {guess && (
-                  <div className="result-entity-preview">
-                    {proxiedImageUrl && !imageFailed ? (
-                      <img
-                        src={proxiedImageUrl}
-                        alt={guess.name}
-                        className="result-preview-image"
-                      />
-                    ) : (
-                      <div className="result-preview-monogram">
-                        <span>{guess.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
-                    <div className="result-preview-meta">
-                      <span className="result-preview-name">{guess.name}</span>
-                      {guess.description && (
-                        <span className="result-preview-desc">{guess.description}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {guess && guess.funFact && (
-                  <div className="fun-fact-card">
-                    <div className="fun-fact-header">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 18h6"></path>
-                        <path d="M10 22h4"></path>
-                        <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
-                      </svg>
-                      <span className="fun-fact-title">Did You Know?</span>
-                    </div>
-                    <p className="fun-fact-text">{guess.funFact}</p>
-                  </div>
-                )}
-
-                <div className="result-btn-group">
-                  <button
-                    className="akinator-btn btn-yes"
-                    onClick={() => startGame(currentDomain)}
-                  >
-                    Play Again
-                  </button>
-                  <button
-                    className="akinator-btn btn-probably"
-                    onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
-                  >
-                    Switch to {currentDomain === "object" ? "Characters" : "Objects"}
-                  </button>
-                  <button
-                    className="akinator-btn btn-dontknow"
-                    onClick={() => {
-                      const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
-                      if (isDailyMode) {
-                        setLeaderboardPrefill({
-                          category: "daily",
-                          score: dailyResult ? dailyResult.questionsCount : questionsUsed,
-                          entityName: dailyResult ? dailyResult.targetName : guess?.name,
-                          domain: currentDomain,
-                          difficulty
-                        });
-                      } else {
-                        setLeaderboardPrefill({
-                          category: "fastest_guess",
-                          score: questionsUsed,
-                          entityName: guess?.name,
-                          domain: currentDomain,
-                          difficulty
-                        });
-                      }
-                      setShowLeaderboardModal(true);
-                    }}
-                  >
-                    Submit to Leaderboard
-                  </button>
-                  <button
-                    className="akinator-btn btn-probnot"
-                    onClick={() => {
-                      setStatsInitialTab("history");
-                      setShowStatsModal(true);
-                    }}
-                  >
-                    Match History
-                  </button>
+              {/* HOLOGRAPHIC NEW RECORD BANNER */}
+              <div className="holographic-record-strip">
+                <div className="record-strip-glow" />
+                <div className="record-strip-content">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                    <path d="M4 22h16"></path>
+                    <path d="M10 14.66V17c0 .55-.45 1-1 1H8v4h8v-4h-1c-.55 0-1-.45-1-1v-2.34"></path>
+                    <path d="M6 4h12v7a6 6 0 0 1-12 0V4Z"></path>
+                  </svg>
+                  <span className="record-strip-text">New Record!</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
                 </div>
               </div>
 
+              {/* UNLOCKED ACHIEVEMENTS SHELF */}
+              <div
+                className="unlocked-achievements-shelf"
+                onClick={() => {
+                  setStatsInitialTab("achievements");
+                  setShowStatsModal(true);
+                }}
+                role="button"
+                tabIndex={0}
+                title="View All Achievements"
+              >
+                <span className="shelf-section-title">Unlocked Achievements</span>
+                <div className="shelf-podium">
+                  <div className="shelf-badge badge-trophy" title="Novice Seeker">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                      <path d="M4 22h16"></path>
+                      <path d="M10 14.66V17c0 .55-.45 1-1 1H8v4h8v-4h-1c-.55 0-1-.45-1-1v-2.34"></path>
+                      <path d="M6 4h12v7a6 6 0 0 1-12 0V4Z"></path>
+                    </svg>
+                  </div>
+                  <div className="shelf-badge badge-gamepad" title="Gamer Dedication">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="6" y1="12" x2="10" y2="12"></line>
+                      <line x1="8" y1="10" x2="8" y2="14"></line>
+                      <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                      <line x1="18" y1="11" x2="18.01" y2="11"></line>
+                      <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+                    </svg>
+                  </div>
+                  <div className="shelf-badge badge-ribbon" title="Master Deductive Mind">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="8" r="6"></circle>
+                      <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+                    </svg>
+                  </div>
+                  <div className="shelf-badge badge-shield" title="Shield Intuition">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                  </div>
+                  <div className="shelf-badge badge-lock" title="Locked Tier">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* DID YOU KNOW? CARD */}
+              <div className="cyber-funfact-card">
+                <div className="cyber-funfact-icon">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                </div>
+                <div className="cyber-funfact-body">
+                  <h4 className="cyber-funfact-title">Did You Know?</h4>
+                  <p className="cyber-funfact-desc">
+                    {guess?.funFact || "Trivia fun fact is mysterious deduction character."}
+                  </p>
+                </div>
+              </div>
+
+              {/* DEDUCTION PATHWAY HORIZONTAL GRAPH */}
+              <DeductionPathwayGraph
+                history={history}
+                targetName={guess ? guess.name : "Deduction Target"}
+              />
+
+              {/* PLAY AGAIN GRADIENT BUTTON */}
+              <div className="result-action-center">
+                <button
+                  className="btn-play-again-gradient"
+                  onClick={() => startGame(currentDomain)}
+                >
+                  Play Again
+                </button>
+              </div>
+
+              {/* SECONDARY ACTION STRIP */}
+              <div className="result-secondary-strip">
+                <button
+                  className="secondary-strip-btn"
+                  onClick={() => startGame(currentDomain === "object" ? "character" : "object")}
+                >
+                  Switch to {currentDomain === "object" ? "Characters" : "Objects"}
+                </button>
+                <button
+                  className="secondary-strip-btn"
+                  onClick={() => {
+                    const questionsUsed = currentQuestion ? currentQuestion.step : history.length;
+                    setLeaderboardPrefill({
+                      category: isDailyMode ? "daily" : "fastest_guess",
+                      score: questionsUsed,
+                      entityName: guess?.name,
+                      domain: currentDomain,
+                      difficulty
+                    });
+                    setShowLeaderboardModal(true);
+                  }}
+                >
+                  Submit to Leaderboard
+                </button>
+                <button
+                  className="secondary-strip-btn"
+                  onClick={() => {
+                    setStatsInitialTab("history");
+                    setShowStatsModal(true);
+                  }}
+                >
+                  Match History
+                </button>
+              </div>
+
+              {/* OPTIONAL QUESTION BREAKDOWN ACCORDION */}
               {history.length > 0 && (
                 <div className="pathway-accordion-wrap">
                   <button
@@ -1427,7 +1404,7 @@ export default function App() {
                     onClick={() => setShowPathway(!showPathway)}
                     type="button"
                   >
-                    <span>{showPathway ? "Hide Question Breakdown" : `View Question Breakdown (${history.length} Questions)`}</span>
+                    <span>{showPathway ? "Hide Question Breakdown" : `View Full Question Trail (${history.length} Questions)`}</span>
                     <svg
                       width="15"
                       height="15"
@@ -1466,179 +1443,134 @@ export default function App() {
           )}
 
           {/* ============================================================ */}
-          {/* LOST SCREEN (STUMPED / DEFEATED) */}
+          {/* LOST SCREEN (STUMPED / DEFEATED) - MATCHING DESIGN SPEC */}
           {/* ============================================================ */}
           {gameState === "lost" && (
-            <div className="arena-result-card">
-              <span className="result-trophy-tag">Well Played</span>
-              <h2 className="result-title">You Defeated Me</h2>
-              <p className="result-detail">
-                I could not deduce who or what you were thinking of within the {maxQuestions}-question limit ({difficulty} mode). Teach Cognitor what you were thinking of to sharpen future games.
-              </p>
-
-              <div className="player-stats-banner">
-                <div className="stat-pill stat-pill-highlight">
-                  <span className="stat-pill-label">Times You Stumped Cognitor</span>
-                  <span className="stat-pill-val">{userStats.stumpedCount}</span>
-                </div>
-                <div className="stat-pill">
-                  <span className="stat-pill-label">Total Games</span>
-                  <span className="stat-pill-val">{userStats.gamesPlayed}</span>
-                </div>
+            <div className="arena-result-card spec-defeat-card">
+              {/* DEFEAT HEADER & CONFETTI ACCENTS */}
+              <div className="defeat-header-container">
+                <div className="defeat-confetti-piece c1" />
+                <div className="defeat-confetti-piece c2" />
+                <div className="defeat-confetti-piece c3" />
+                <div className="defeat-confetti-piece c4" />
+                <div className="defeat-confetti-piece c5" />
+                <div className="defeat-confetti-piece c6" />
+                <h2 className="defeat-main-title">You Defeated Me!</h2>
+                <h3 className="defeat-giveup-title">I Give Up</h3>
               </div>
 
-              <div style={{ textAlign: "center", margin: "0.75rem 0" }}>
-                <button
-                  type="button"
-                  className="game-btn game-btn-secondary"
-                  onClick={() => {
-                    setLeaderboardPrefill({
-                      category: "stumped",
-                      score: maxQuestions,
-                      entityName: learnName || undefined,
-                      domain: currentDomain,
-                      difficulty
-                    });
-                    setShowLeaderboardModal(true);
-                  }}
-                >
-                  Submit to Stumped Hall of Fame
-                </button>
-              </div>
-
-              {latestUnlockedBadges.length > 0 && (
-                <div
-                  className="new-achievements-shelf"
-                  onClick={() => {
-                    setStatsInitialTab("achievements");
-                    setShowStatsModal(true);
-                  }}
-                  style={{ cursor: "pointer" }}
-                >
-                  <span className="shelf-title">Badge Unlocked!</span>
-                  <div className="shelf-badge-list">
-                    {latestUnlockedBadges.map((b) => (
-                      <span key={b.id} className="shelf-badge-item">
-                        {b.title}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {isDailyMode && dailyResult && (
-                <div className="daily-challenge-card" style={{ margin: "1rem 0" }}>
-                  <div className="daily-header-row">
-                    <span className="daily-eyebrow">Daily Challenge #{dailyResult.dayNumber} Result</span>
-                    {dailyStreak.currentStreak > 0 && (
-                      <span className="daily-streak-badge">{dailyStreak.currentStreak} Day Streak</span>
-                    )}
-                  </div>
-                  <p className="daily-target-desc">
-                    You beat Cognitor on today's target ({dailyResult.targetName})!
+              {/* CARD 1: CLOSEST GUESS */}
+              <div className="closest-guess-cyber-card">
+                <CyberAvatar
+                  size={64}
+                  imageUrl={null}
+                  name={closestWrongEntity ? closestWrongEntity.name : "Closest Guess"}
+                  ringGlow={true}
+                />
+                <div className="closest-guess-meta">
+                  <h4 className="closest-guess-title">Closest Guess</h4>
+                  <p className="closest-guess-desc">
+                    {closestWrongEntity
+                      ? `${closestWrongEntity.name} - ${closestWrongEntity.description || "A near-miss entity for a mysterious cyber/human character."}`
+                      : "A near-miss entity for a mysterious cyber/human character."}
                   </p>
-                  <button className="daily-share-btn" onClick={handleShareDaily}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="18" cy="5" r="3"></circle>
-                      <circle cx="6" cy="12" r="3"></circle>
-                      <circle cx="18" cy="19" r="3"></circle>
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                    </svg>
-                    <span>{copiedShare ? "Copied to Clipboard!" : "Share Daily Result"}</span>
-                  </button>
-                  {dailyData?.entity.funFact && (
-                    <p className="daily-fun-fact-text">
-                      <strong>Did you know?</strong> {dailyData.entity.funFact}
-                    </p>
-                  )}
                 </div>
-              )}
+              </div>
 
-              {closestWrongEntity && closestWrongEntity.funFact && (
-                <div className="fun-fact-card" style={{ margin: "1rem 0" }}>
-                  <div className="fun-fact-header">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18h6"></path>
-                      <path d="M10 22h4"></path>
-                      <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
-                    </svg>
-                    <span className="fun-fact-title">Did You Know? (Closest guess: {closestWrongEntity.name})</span>
-                  </div>
-                  <p className="fun-fact-text">{closestWrongEntity.funFact}</p>
-                </div>
-              )}
-
+              {/* CARD 2: CROWDSOURCED LEARNING FORM */}
               {learnSubmitted ? (
                 <div className="learn-success-card">
                   <p className="learn-success-text">
-                    Thank you. Your entry has been recorded and will expand future deductions.
+                    Thank you. Your entity submission has been queued and will sharpen future deductions!
                   </p>
                   <button
-                    className="akinator-btn btn-yes"
-                    style={{ width: "auto", margin: "1rem auto 0" }}
+                    className="btn-cyan-glow"
+                    style={{ margin: "1rem auto 0", display: "inline-block" }}
                     onClick={() => startGame(currentDomain)}
                   >
                     Play Again
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleLearnSubmit} className="learn-form-wrapper">
-                  <div className="akinator-form-group">
-                    <label className="akinator-form-label">
-                      {currentDomain === "object" ? "What object were you thinking of?" : "Who were you thinking of?"}
-                    </label>
-                    <input
-                      type="text"
-                      className="akinator-input"
-                      placeholder={currentDomain === "object" ? "e.g. Telescope, Smart Watch" : "e.g. Marie Curie, Alan Turing"}
-                      value={learnName}
-                      onChange={(e) => setLearnName(e.target.value)}
-                      required
-                    />
-                  </div>
+                <div className="crowdsourced-form-card">
+                  <h4 className="crowdsourced-title">Crowdsourced Learning Form</h4>
+                  <p className="crowdsourced-sub">
+                    {currentDomain === "object" ? "Teach Cognitor the object you were thinking of" : "Teach Cognitor who you were thinking of"}
+                  </p>
 
-                  <div className="akinator-form-group">
-                    <label className="akinator-form-label">
-                      A question distinguishing them from{" "}
-                      <strong>{closestWrongEntity ? closestWrongEntity.name : "my closest deduction"}</strong>:
-                    </label>
-                    <input
-                      type="text"
-                      className="akinator-input"
-                      placeholder={currentDomain === "object" ? "e.g. Is it used to observe stars?" : "e.g. Did they break the Enigma code?"}
-                      value={learnQuestion}
-                      onChange={(e) => setLearnQuestion(e.target.value)}
-                      required
-                    />
-                  </div>
+                  <form onSubmit={handleLearnSubmit} className="cyber-learn-form">
+                    <div className="form-group-cyber">
+                      <label className="cyber-field-label">Entity Name</label>
+                      <input
+                        type="text"
+                        className="cyber-input"
+                        placeholder={currentDomain === "object" ? "e.g. Telescope, Smart Watch..." : "e.g. Marie Curie, Alan Turing..."}
+                        value={learnName}
+                        onChange={(e) => setLearnName(e.target.value)}
+                        required
+                      />
+                    </div>
 
-                  <div className="akinator-form-group">
-                    <label className="akinator-form-label">
-                      Correct answer for your selection:
-                    </label>
-                    <select
-                      className="akinator-select"
-                      value={learnAnswer}
-                      onChange={(e) => setLearnAnswer(parseFloat(e.target.value))}
-                    >
-                      <option value={1.0}>Yes</option>
-                      <option value={0.75}>Probably</option>
-                      <option value={0.5}>Don't know</option>
-                      <option value={0.25}>Probably not</option>
-                      <option value={0.0}>No</option>
-                    </select>
-                  </div>
+                    <div className="form-group-cyber">
+                      <label className="cyber-field-label">
+                        Distinctive Clue distinguishing from {closestWrongEntity ? closestWrongEntity.name : "closest deduction"}
+                      </label>
+                      <input
+                        type="text"
+                        className="cyber-input"
+                        placeholder={currentDomain === "object" ? "e.g. Is it used to observe stars?" : "e.g. Did they break the Enigma code?"}
+                        value={learnQuestion}
+                        onChange={(e) => setLearnQuestion(e.target.value)}
+                        required
+                      />
+                    </div>
 
-                  <div className="learn-btn-row">
-                    <button type="submit" className="akinator-btn btn-yes" style={{ flex: 1 }} disabled={loading}>
-                      {loading ? "Recording..." : "Submit Entity"}
-                    </button>
-                    <button type="button" className="sub-btn" onClick={() => startGame(currentDomain)}>
-                      Skip
-                    </button>
-                  </div>
-                </form>
+                    <div className="form-group-cyber">
+                      <label className="cyber-field-label">Correct answer for your selection</label>
+                      <select
+                        className="cyber-select"
+                        value={learnAnswer}
+                        onChange={(e) => setLearnAnswer(parseFloat(e.target.value))}
+                      >
+                        <option value={1.0}>Yes</option>
+                        <option value={0.75}>Probably</option>
+                        <option value={0.5}>Don't know</option>
+                        <option value={0.25}>Probably not</option>
+                        <option value={0.0}>No</option>
+                      </select>
+                    </div>
+
+                    <label className="cyber-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={agreeLearnTerms}
+                        onChange={(e) => setAgreeLearnTerms(e.target.checked)}
+                        className="cyber-checkbox-native"
+                      />
+                      <span className="cyber-checkbox-custom" />
+                      <span className="cyber-checkbox-text">
+                        I agree to submit this entity to the crowdsourced learning review queue.
+                      </span>
+                    </label>
+
+                    <div className="cyber-learn-actions">
+                      <button
+                        type="submit"
+                        className="btn-cyan-glow submit-entity-btn"
+                        disabled={loading || !agreeLearnTerms}
+                      >
+                        {loading ? "Recording..." : "Submit Entity"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-dark-outline"
+                        onClick={() => startGame(currentDomain)}
+                      >
+                        Skip & Play Again
+                      </button>
+                    </div>
+                  </form>
+                </div>
               )}
             </div>
           )}

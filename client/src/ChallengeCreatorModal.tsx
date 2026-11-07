@@ -247,38 +247,37 @@ export function ChallengeCreatorModal({
           </>
         ) : (
           /* ============================================================ */
-          /* CHALLENGE CREATED SUCCESS VIEW */
+          /* CHALLENGE CREATED SUCCESS VIEW (MATCHING DESIGN SPEC) */
           /* ============================================================ */
           <div className="challenge-success-view">
-            <div className="challenge-code-showcase">
-              <span className="showcase-eyebrow">Challenge Ready</span>
-              <h2 className="showcase-code">{createdChallenge.code}</h2>
-              <p className="showcase-desc">
-                Your friend will try to guess your secret {createdChallenge.domain} in under 20 questions!
-              </p>
+            <div className="challenge-lobby-card">
+              <span className="lobby-invite-subtitle">Lobby / Invite</span>
+              <div className="lobby-code-row">
+                <span className="lobby-code-pill">{createdChallenge.code}</span>
+                <button
+                  className="lobby-copy-btn"
+                  onClick={handleCopyLink}
+                  type="button"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <span>{copiedLink ? "Copied!" : "Copy Link"}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="challenge-link-box">
-              <input
-                type="text"
-                readOnly
-                value={generateChallengeShareLink(createdChallenge.code)}
-                className="challenge-link-input"
-              />
-            </div>
+            <p className="showcase-desc" style={{ marginTop: "1rem", textAlign: "center" }}>
+              Share this code with your friend. Cognitor will challenge them to deduce your target!
+            </p>
 
-            <div className="challenge-success-actions">
-              <button className="btn btn-primary" onClick={handleCopyLink} type="button">
-                {copiedLink ? "Link Copied to Clipboard!" : "Copy Share Link"}
-              </button>
+            <div className="challenge-success-actions" style={{ marginTop: "1.25rem" }}>
               <button className="btn btn-secondary" onClick={handleCopyCard} type="button">
-                {copiedCard ? "Challenge Card Copied!" : "Copy Full Message"}
+                {copiedCard ? "Card Copied!" : "Copy Full Invitation"}
               </button>
-            </div>
-
-            <div className="challenge-self-test-row">
               <button
-                className="btn btn-secondary btn-sm"
+                className="btn btn-primary"
                 onClick={() => {
                   onPlayChallenge(
                     createdChallenge.code,
@@ -289,7 +288,7 @@ export function ChallengeCreatorModal({
                 }}
                 type="button"
               >
-                Test Play Your Own Challenge
+                Play Now
               </button>
             </div>
           </div>
